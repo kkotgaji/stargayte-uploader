@@ -1,4 +1,4 @@
-# 설치본 배포 — 윈도우 러너에서 NSIS 설치본을 만들어 GitHub Release에 붙인다.
+# 설치본 배포 — 윈도우(NSIS exe)와 맥(dmg, 무서명 ad-hoc)을 각각의 러너에서 만들어 GitHub Release에 붙인다.
 # 트리거는 둘: v* 태그 푸시, 또는 Actions 탭의 "Run workflow"(workflow_dispatch). 어느 쪽이든
 # Release 태그는 package.json의 version(v<버전>)이다 — 태그를 못 미는 환경에서도 Release가 나온다.
 # 사이트 주소는 build.mjs 기본값(https://stargayte.vercel.app)이 박힌다.
@@ -10,8 +10,21 @@ on:
 permissions:
   contents: write
 jobs:
-  windows-installer:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist
+            glob: release/*.exe
+          - os: macos-latest
+            script: dist:mac
+            glob: release/*.dmg
+    runs-on: ${{ matrix.os }}
+    env:
+      # 맥: 키체인에서 인증서를 찾지 않는다(무서명 — afterPack이 ad-hoc 서명만 입힌다).
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,7 +33,21 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
-      - run: npm run dist
+      - run: npm run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: ${{ matrix.glob }}
+          if-no-files-found: error
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
       - name: 버전 읽기
         id: ver
         shell: bash
@@ -30,5 +57,8 @@ jobs:
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: 스타게이트 등록기 ${{ steps.ver.outputs.tag }}
-          files: release/*.exe
+          files: installers/*
           generate_release_notes: true
+          body: |
+            - 윈도우: `stargayte-uploader-setup-<버전>.exe` — 실행하면 설치되고 바로 켜집니다(SmartScreen이 뜨면 "추가 정보 → 실행").
+            - 맥: `stargayte-uploader-<버전>-mac.dmg` — 앱을 응용 프로그램으로 끌어 넣고 처음 열 때 막히면 **시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"**(서명 없는 앱이라 한 번만).

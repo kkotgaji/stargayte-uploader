@@ -5,7 +5,7 @@
 import { app, Menu, Notification, Tray, nativeImage, shell } from "electron";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
-import { INITIAL_SCAN_FROM, REPLAY_SUBDIR, RETRY_MAX, RETRY_MS, SITE_BASE, UPLOADER_PAGE, VERSION } from "./config";
+import { INITIAL_SCAN_FROM, RETRY_MAX, RETRY_MS, SITE_BASE, UPLOADER_PAGE, VERSION, replayDirOf } from "./config";
 import { initLog, log } from "./log";
 import { SitePage, type PageUser } from "./page";
 import { Store } from "./store";
@@ -28,7 +28,7 @@ let status = "준비 중";
 let recent: string[] = [];
 
 const assetPath = (name: string): string => join(app.isPackaged ? process.resourcesPath : join(__dirname, ".."), "assets", name);
-const replayDir = (): string => join(app.getPath("documents"), ...REPLAY_SUBDIR);
+const replayDir = (): string => replayDirOf(process.platform, { home: app.getPath("home"), documents: app.getPath("documents") });
 
 async function boot(): Promise<void> {
   await app.whenReady();
@@ -37,8 +37,10 @@ async function boot(): Promise<void> {
   log(`시작 v${VERSION} · 사이트 ${SITE_BASE}`);
   store = new Store(app.getPath("userData"));
 
-  // 윈도우 시작 때 함께 뜬다(설치본에서만 — 개발 실행은 등록하지 않는다).
+  // 윈도우·맥 로그인 때 함께 뜬다(설치본에서만 — 개발 실행은 등록하지 않는다).
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, args: ["--hidden"] });
+  // 맥: 독(Dock)에 안 나온다 — 메뉴 막대(트레이)에만 사는 앱이다.
+  if (process.platform === "darwin") app.dock?.hide();
 
   makeTray();
   app.on("second-instance", () => { if (!user) page.show(); });

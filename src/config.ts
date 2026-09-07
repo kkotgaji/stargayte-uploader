@@ -13,9 +13,15 @@ export const SITE_BASE: string = typeof __SITE_BASE__ === "string" ? __SITE_BASE
 export const UPLOADER_PAGE = `${SITE_BASE.replace(/\/$/, "")}/uploader.html`;
 export const VERSION: string = typeof __VERSION__ === "string" ? __VERSION__ : "0.0.0";
 
-/** 스타크래프트 리마스터가 게임이 끝날 때마다 리플레이를 두는 자리 — 문서 폴더 아래.
- *  문서 폴더가 OneDrive로 옮겨져 있어도 Electron의 app.getPath("documents")가 따라간다. */
-export const REPLAY_SUBDIR = ["StarCraft", "Maps", "Replays", "AutoSave"] as const;
+/** 스타크래프트 리마스터가 게임이 끝날 때마다 리플레이를 두는 자리.
+ *  · 윈도우: 문서\StarCraft\Maps\Replays\AutoSave — 문서 폴더가 OneDrive로 옮겨져 있어도
+ *    Electron의 app.getPath("documents")가 따라간다.
+ *  · 맥: ~/Library/Application Support/Blizzard/StarCraft/Maps/Replays/AutoSave (클럽 맥 유저 확인). */
+export function replayDirOf(platform: NodeJS.Platform, paths: { home: string; documents: string }): string {
+  const tail = ["StarCraft", "Maps", "Replays", "AutoSave"];
+  const base = platform === "darwin" ? [paths.home, "Library", "Application Support", "Blizzard"] : [paths.documents];
+  return [...base, ...tail].join(platform === "win32" ? "\\" : "/");
+}
 
 /** 처음 설치했을 때 이 시각(KST 2026-07-01 0시) 이후의 리플레이를 한 번 훑어 올린다(요청).
  *  그 뒤로는 새로 생기는 파일만 본다. */

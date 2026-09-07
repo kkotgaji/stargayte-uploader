@@ -12,6 +12,20 @@ extraResources:
   - from: assets
     to: assets
 npmRebuild: false
+# 맥: 서명·공증 없이 낸다(결정: 무서명). electron-builder는 인증서가 없으면 서명을 통째로 건너뛰는데,
+# Apple Silicon은 서명이 아예 없는 앱을 "손상됨"으로 거절하므로 afterPack에서 임시(ad-hoc) 서명만
+# 입힌다. 사용자는 처음 한 번 시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"를 눌러야 한다.
+afterPack: scripts/afterPack.cjs
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+  icon: assets/icon.png
+  category: public.app-category.utilities
+  identity: null
+  artifactName: "stargayte-uploader-${version}-mac.${ext}"
+dmg:
+  sign: false
 win:
   target:
     - target: nsis

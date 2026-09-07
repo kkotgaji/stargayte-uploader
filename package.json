@@ -1,7 +1,7 @@
 {
   "name": "stargayte-uploader",
   "productName": "스타게이트 등록기",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "스타크래프트 AutoSave 리플레이를 스타게이트에 자동 등록하는 트레이 앱",
   "main": "dist/main.cjs",
@@ -9,7 +9,8 @@
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder --win --x64"
+    "dist": "npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run build && electron-builder --mac --universal"
   },
   "devDependencies": {
     "electron": "^33.2.1",

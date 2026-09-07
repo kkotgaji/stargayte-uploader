@@ -43,13 +43,18 @@
 main과 같게 되돌림). 등록기는 사이트가 쓰는 API를 사이트 출처에서 그대로 부른다.
 
 ## 6. 설치본 배포
-`.github/workflows/release.yml` — `v*` 태그 푸시 → 윈도우 러너에서 `npm run dist` → 그 태그의 GitHub
-Release에 exe를 붙인다. 셋째 세션이 v0.2.0 태그를 밀어 첫 Release를 만들었다(결과는 저장소 Releases).
+`.github/workflows/release.yml` — `v*` 태그 푸시 또는 "Run workflow" → 윈도우 러너(exe)·맥 러너(dmg 유니버설)
+→ `v<package.json 버전>` Release에 둘 다 붙인다(release 잡 하나가 모아서 올린다 — 두 잡이 같은 Release를
+동시에 만들면 경합한다). 이 세션의 git 프록시는 태그 푸시를 막으므로(403) workflow_dispatch로 돌렸다.
+**맥은 무서명**(사용자 결정, 클럽에 맥 유저가 있다): electron-builder는 인증서가 없으면 서명을 통째로
+건너뛰어 Apple Silicon에서 "손상됨"이 되므로 `scripts/afterPack.cjs`가 ad-hoc 서명(`codesign -s -`)을
+입힌다. 사용자는 처음 한 번 "그래도 열기". 맥 리플레이 폴더는 `config.ts`의 `replayDirOf`
+(`~/Library/Application Support/Blizzard/StarCraft/Maps/Replays/AutoSave`, 클럽 맥 유저가 확인한 경로).
+맥 실기 검증은 못 했다(리눅스 세션). 자동 업데이트는 안 한다(사용자 결정: 수동).
 
 ## 7. 남은 일
-- [ ] 사이트 브랜치 main 머지·Vercel 배포(그래야 `/uploader.html`이 뜬다 — 그 전엔 등록기가
-      "사이트에 연결 중"에서 멈춘다: rewrites가 index.html을 주므로 ready 이벤트가 안 온다).
-- [ ] 윈도우에서 실제 실행 검증(트레이·숨은 창 로그인·토스트·자동 실행).
+- [x] 사이트 PR #1 main 머지·Vercel 배포됨 — 사용자가 https://stargayte.vercel.app/uploader.html 로그인 화면 확인.
+- [ ] 윈도우·맥에서 실제 실행 검증(트레이·숨은 창 로그인·토스트·자동 실행·맥 "그래도 열기" 흐름).
 
 ## 8. 명령
 ```
