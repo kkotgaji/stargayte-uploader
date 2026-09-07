@@ -21,8 +21,8 @@
 5. 유즈맵·팀 못 나눔·관전자 추정·2분 미만 → 건너뜀. 컴퓨터 낀 경기 → 등록.
 6. Electron, NSIS 원클릭, 윈도우 시작 시 자동 실행. 처음 설치하면 2026-07-01(KST) 이후 리플레이를
    한 번 훑어 올린다. 오른쪽 아래 토스트 "리플레이 N건이 스타게이트에 업로드되었습니다."
-7. 사이트 주소는 빌드 때 `UPLOADER_SITE_BASE`로 박는다 — **운영 사이트 도메인은 저장소 어디에도
-   없어 사용자에게 물어야 한다**(API는 https://stargayte-api.up.railway.app).
+7. 운영 사이트는 https://stargayte.vercel.app (API는 https://stargayte-api.up.railway.app). 빌드 기본값이
+   그것이고 `UPLOADER_SITE_BASE`로 바꿀 수 있다(로컬 vite dev에 붙일 때).
 
 ## 3. 이 저장소의 파일
 `src/main.ts` 트레이·처리 루프, `src/page.ts` 숨은 사이트 창(로드 재시도·job 왕복·세션 이벤트),
@@ -39,20 +39,22 @@
 - 등록기: tsc·esbuild 통과. **윈도우에서 실제 실행은 아직 못 했다**(리눅스 세션).
 
 ## 5. 서버 쪽
-stargayte-api 브랜치 `claude/handoff-continuation-4u3zmo`(77095c3)에 `POST /api/auth/app-login`이
-있다 — 전 구조(앱 장기 토큰)용이라 **지금 구조에선 필요 없다**. 머지하지 않아도 등록기는 돈다.
-사용자가 원하면 브랜치를 버린다.
+바꿀 것이 없다. 전 구조용 `POST /api/auth/app-login`은 사용자 지시로 걷었다(stargayte-api 브랜치를
+main과 같게 되돌림). 등록기는 사이트가 쓰는 API를 사이트 출처에서 그대로 부른다.
 
-## 6. 남은 일
-- [ ] 운영 사이트 도메인 확인 → `UPLOADER_SITE_BASE`로 빌드.
-- [ ] 사이트 브랜치 main 머지·Vercel 배포(그래야 `/uploader.html`이 뜬다).
+## 6. 설치본 배포
+`.github/workflows/release.yml` — `v*` 태그 푸시 → 윈도우 러너에서 `npm run dist` → 그 태그의 GitHub
+Release에 exe를 붙인다. 셋째 세션이 v0.2.0 태그를 밀어 첫 Release를 만들었다(결과는 저장소 Releases).
+
+## 7. 남은 일
+- [ ] 사이트 브랜치 main 머지·Vercel 배포(그래야 `/uploader.html`이 뜬다 — 그 전엔 등록기가
+      "사이트에 연결 중"에서 멈춘다: rewrites가 index.html을 주므로 ready 이벤트가 안 온다).
 - [ ] 윈도우에서 실제 실행 검증(트레이·숨은 창 로그인·토스트·자동 실행).
-- [ ] 설치본 배포 방법(GitHub Release 등).
 
-## 7. 명령
+## 8. 명령
 ```
 npm install && npm run typecheck
-UPLOADER_SITE_BASE=https://<사이트> npm run build
-npm start                     # 로컬 사이트(vite dev 5173)에 붙여 띄우기
-npm run dist                  # 윈도우(또는 wine32+64 리눅스)에서 설치본
+npm run build                                       # 운영 사이트 주소로
+UPLOADER_SITE_BASE=http://localhost:5173 npm start   # 로컬 사이트(vite dev)에 붙여 띄우기
+git tag v0.x.y && git push origin v0.x.y             # 설치본 Release
 ```

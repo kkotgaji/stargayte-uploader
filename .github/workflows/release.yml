@@ -1,0 +1,33 @@
+# 설치본 배포 — v* 태그를 푸시하면 윈도우 러너에서 NSIS 설치본을 만들어 그 태그의 Release에 붙인다.
+# 사이트 주소는 build.mjs 기본값(https://stargayte.vercel.app)이 박힌다.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run dist
+      - name: Release에 설치본 붙이기
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+          generate_release_notes: true
+      - name: 수동 실행이면 아티팩트로만
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: stargayte-uploader-setup
+          path: release/*.exe

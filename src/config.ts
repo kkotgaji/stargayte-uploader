@@ -8,8 +8,8 @@
 declare const __SITE_BASE__: string;
 declare const __VERSION__: string;
 
-/** 스타게이트 홈페이지 — 숨은 창이 `${SITE_BASE}/uploader.html`을 띄운다. 빌드 때 박히고, 없으면 로컬 Vite다. */
-export const SITE_BASE: string = typeof __SITE_BASE__ === "string" ? __SITE_BASE__ : "http://localhost:5173";
+/** 스타게이트 홈페이지 — 숨은 창이 `${SITE_BASE}/uploader.html`을 띄운다. 빌드 때 박힌다(build.mjs, 기본은 운영 사이트). */
+export const SITE_BASE: string = typeof __SITE_BASE__ === "string" ? __SITE_BASE__ : "https://stargayte.vercel.app";
 export const UPLOADER_PAGE = `${SITE_BASE.replace(/\/$/, "")}/uploader.html`;
 export const VERSION: string = typeof __VERSION__ === "string" ? __VERSION__ : "0.0.0";
 

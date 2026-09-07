@@ -44,16 +44,18 @@
 ```
 npm install
 npm run typecheck
-UPLOADER_SITE_BASE=https://<사이트 주소> npm run build   # dist/main.cjs, dist/preload.cjs
-npm start                                             # 로컬에서 띄워 보기(기본 http://localhost:5173)
+npm run build                                         # dist/main.cjs, dist/preload.cjs (사이트: https://stargayte.vercel.app)
+UPLOADER_SITE_BASE=http://localhost:5173 npm start     # 로컬 사이트(vite dev)에 붙여 띄워 보기
 ```
-등록 절차만 검증하려면 등록기 없이 브라우저에서 `<사이트>/uploader.html`을 열어 파일을 고르면 된다.
+등록 절차만 검증하려면 등록기 없이 브라우저에서 https://stargayte.vercel.app/uploader.html 을 열어 파일을 고르면 된다.
 
-## 설치본 만들기 (Windows에서)
+## 설치본 배포 — GitHub Release
+`v*` 태그를 푸시하면 GitHub Actions(`.github/workflows/release.yml`)가 윈도우 러너에서 설치본을
+만들어 그 태그의 Release에 `stargayte-uploader-setup-<버전>.exe`를 붙인다. 태그는 package.json의
+version과 맞춘다.
 ```
-set UPLOADER_SITE_BASE=https://<사이트 주소>
-npm run dist            # release/stargayte-uploader-setup-<버전>.exe (NSIS 원클릭)
+npm version 0.2.1 --no-git-tag-version   # package.json 버전 올리고 커밋한 뒤
+git tag v0.2.1 && git push origin v0.2.1
 ```
-리눅스/맥에서 만들려면 wine(32·64비트 둘 다)이 있어야 한다(rcedit·NSIS 언인스톨러 생성).
-사이트 주소는 빌드 때 번들에 박힌다 — 빼먹으면 `http://localhost:5173`으로 박히니 꼭 준다.
-서명은 안 한다(SmartScreen 경고가 뜨면 "추가 정보 → 실행").
+손으로 만들려면 윈도우에서 `npm run dist`(`release/` 아래). 리눅스/맥은 wine(32·64비트 둘 다)이
+있어야 한다. 서명은 안 한다(SmartScreen 경고가 뜨면 "추가 정보 → 실행").

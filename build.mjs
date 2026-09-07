@@ -4,8 +4,9 @@ import { build } from "esbuild";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
-const siteBase = process.env.UPLOADER_SITE_BASE ?? "http://localhost:5173";
-if (!process.env.UPLOADER_SITE_BASE) console.warn("[build] UPLOADER_SITE_BASE가 없어 http://localhost:5173 으로 박습니다.");
+// 기본은 운영 사이트다 — 설치본은 늘 거기를 본다. 로컬 사이트에 붙여 볼 때만 바꾼다.
+const siteBase = process.env.UPLOADER_SITE_BASE ?? "https://stargayte.vercel.app";
+console.log(`[build] 사이트 ${siteBase}`);
 
 const common = {
   bundle: true,
