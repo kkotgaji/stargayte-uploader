@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self'">
+<title>스타게이트 등록기</title>
+<style>
+  body { margin: 0; font: 14px/1.5 "Malgun Gothic", "Segoe UI", sans-serif; background: #10141c; color: #e6e9ef; }
+  main { padding: 28px 28px 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 18px; color: #8b93a3; font-size: 12px; }
+  label { display: block; font-size: 12px; color: #aab2c0; margin: 10px 0 4px; }
+  input { width: 100%; box-sizing: border-box; padding: 9px 10px; border-radius: 6px; border: 1px solid #2b3446; background: #1a2130; color: #fff; font-size: 14px; }
+  input:focus { outline: none; border-color: #2b62e8; }
+  button { width: 100%; margin-top: 18px; padding: 10px; border: 0; border-radius: 6px; background: #2b62e8; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  .err { color: #ff7a7a; font-size: 12px; min-height: 18px; margin-top: 8px; }
+  .ok { color: #7ad48a; }
+  .foot { margin-top: 14px; font-size: 11px; color: #6b7382; word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>스타게이트 등록기</h1>
+  <p class="sub">홈페이지 계정으로 한 번만 로그인하면, 스타 리플레이가 생길 때마다 자동으로 등록해요.</p>
+  <form id="f">
+    <label for="id">아이디</label>
+    <input id="id" autocomplete="username" autofocus>
+    <label for="pw">비밀번호</label>
+    <input id="pw" type="password" autocomplete="current-password">
+    <button id="btn" type="submit">로그인</button>
+    <div class="err" id="err"></div>
+  </form>
+  <div class="foot" id="foot"></div>
+</main>
+<script src="login.js"></script>
+</body>
+</html>

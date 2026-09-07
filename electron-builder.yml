@@ -1,0 +1,33 @@
+appId: com.stargayte.uploader
+productName: 스타게이트 등록기
+directories:
+  output: release
+files:
+  - dist/main.cjs
+  - dist/preload.cjs
+  - login.html
+  - login.js
+  - toast.html
+  - toast.js
+  - package.json
+extraResources:
+  - from: assets
+    to: assets
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/icon.png
+  artifactName: "stargayte-uploader-setup-${version}.${ext}"
+nsis:
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: false
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+  shortcutName: 스타게이트 등록기
+
+# 자동 갱신(latest.yml) 발행은 안 한다 — 없으면 빌드 끝에 publish 단계가 null을 읽다 넘어진다.
+publish: null

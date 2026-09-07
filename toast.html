@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self'">
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  .t { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; align-items: center; gap: 12px;
+       padding: 0 18px; border-radius: 12px; background: rgba(16, 20, 28, .94); color: #e6e9ef;
+       font: 14px/1.4 "Malgun Gothic", "Segoe UI", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+       border: 1px solid rgba(43, 98, 232, .55); animation: in .25s ease-out; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #2b62e8; flex: none; }
+  @keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body><div class="t"><span class="dot"></span><span id="m"></span></div><script src="toast.js"></script></body>
+</html>

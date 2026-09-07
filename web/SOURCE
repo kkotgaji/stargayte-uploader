@@ -1,0 +1,13 @@
+stargayte 9e2884b0eebbd9c4ce234692490a682a11a2b0bd
+src/utils/replayParser.ts
+src/utils/replayBattles.ts
+src/utils/replayBuildMix.ts
+src/utils/replayTechNames.ts
+src/utils/replayTactics.ts
+src/utils/replayNames.ts
+src/utils/date.ts
+src/utils/replayMemberMatch.ts
+src/constants/computerSlot.ts
+src/constants/unregisteredSlot.ts
+src/types/index.ts
+src/types/screp-js.d.ts
