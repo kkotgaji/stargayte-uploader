@@ -16,6 +16,8 @@ export interface WatcherOptions {
   onFile: (path: string) => Promise<void>;
   /** 재훑기 한 번이 끝날 때마다 새로 잡힌 파일 수(0 포함) — 첫 훑기 안내용. */
   onBatch?: (count: number) => void;
+  /** 대기열의 파일을 다 처리하고 쉬게 될 때마다 — 모아 둔 알림을 내보내는 용도. */
+  onIdle?: () => void;
 }
 
 export class ReplayWatcher {
@@ -92,6 +94,7 @@ export class ReplayWatcher {
     } finally {
       this.running = false;
     }
+    this.opt.onIdle?.();
   }
 
   async rescan(): Promise<void> {

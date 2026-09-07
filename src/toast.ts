@@ -1,5 +1,5 @@
 // 화면 오른쪽 아래 작은 오버레이 토스트 — 창 테두리 없고 투명, 항상 위, 클릭은 통과.
-// "리플레이 N건이 스타게이트에 업로드되었습니다." 같이 한 줄만 몇 초 보였다 사라진다.
+// "리플레이 N건을 스타게이트에 등록했습니다." 같이 한 줄만 몇 초 보였다 사라진다.
 // (스타를 전체화면(독점)으로 켠 동안은 다른 창처럼 가려질 수 있다 — 창모드 전체화면은 보인다.)
 import { BrowserWindow, screen } from "electron";
 import { join } from "node:path";
@@ -37,22 +37,18 @@ export function showToast(text: string): void {
   });
 }
 
-// 등록은 한 판씩 이어져 들어오므로, 잠깐 모았다가 "N건"으로 한 번에 알린다.
+// 등록은 한 판씩 이어져 들어오므로(첫 훑기엔 수십 건) 건마다 띄우지 않고 세어 두었다가,
+// 대기열이 다 빠졌을 때(watcher의 onIdle) "N건"으로 한 번만 알린다. 시간으로 모으면 파일 하나
+// 올리는 데 그보다 오래 걸려 건마다 따로 떴다.
 let pending = 0;
-let firstAt = 0;
-let flushTimer: NodeJS.Timeout | null = null;
-const GATHER_MS = 3000;
-const GATHER_MAX_MS = 12000;
 
-export function toastUploaded(count = 1): void {
-  if (pending === 0) firstAt = Date.now();
+export function noteUploaded(count = 1): void {
   pending += count;
-  if (flushTimer) clearTimeout(flushTimer);
-  const wait = Math.max(0, Math.min(GATHER_MS, firstAt + GATHER_MAX_MS - Date.now()));
-  flushTimer = setTimeout(() => {
-    const n = pending;
-    pending = 0;
-    flushTimer = null;
-    showToast(`리플레이 ${n}건이 스타게이트에 업로드되었습니다.`);
-  }, wait);
+}
+
+export function flushUploaded(): void {
+  if (pending === 0) return;
+  const n = pending;
+  pending = 0;
+  showToast(`리플레이 ${n}건을 스타게이트에 등록했습니다.`);
 }

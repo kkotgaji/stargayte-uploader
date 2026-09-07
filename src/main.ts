@@ -9,7 +9,7 @@ import { INITIAL_SCAN_FROM, RETRY_MAX, RETRY_MS, SITE_BASE, UPLOADER_PAGE, VERSI
 import { initLog, log } from "./log";
 import { SitePage, type PageUser } from "./page";
 import { Store } from "./store";
-import { showToast, toastUploaded } from "./toast";
+import { flushUploaded, noteUploaded } from "./toast";
 import { ReplayWatcher } from "./watcher";
 
 // 한 번에 하나만 — 두 번 켜면 먼저 켜진 쪽이 그대로 남는다.
@@ -114,7 +114,6 @@ function refreshTray(): void {
     { label: "지금 폴더 다시 검사", click: () => { void watcher?.rescan(); }, enabled: !!watcher },
     { label: "리플레이 폴더 열기", click: () => { void shell.openPath(replayDir()); } },
     { label: "스타게이트 열기", click: () => { void shell.openExternal(SITE_BASE); } },
-    { label: "로그 열기", click: () => { void shell.openPath(join(app.getPath("userData"), "uploader.log")); } },
     { type: "separator" },
     { label: user ? "다른 계정으로 로그인" : "로그인", click: () => { if (user) page.logout(); else page.show(); } },
     { label: "종료", click: () => { app.quit(); } },
@@ -136,14 +135,16 @@ function startWatching(): void {
       return (e.tries ?? 0) >= RETRY_MAX || Date.now() - Date.parse(e.at) < RETRY_MS;
     },
     onFile: handleFile,
+    // 대기열이 다 빠졌을 때 한 번 — 그동안 올라간 건수를 토스트 하나로 알린다.
+    onIdle: flushUploaded,
     onBatch: (n) => {
-      // 처음 설치한 뒤의 첫 훑기 — 옛 리플레이를 한 번에 올리니 무엇을 하는지 알린다.
+      // 처음 설치한 뒤의 첫 훑기 — 옛 리플레이를 한 번에 올리니 무엇을 하는지 알린다(알림 하나만,
+      // 토스트는 다 올라간 뒤 "N건을 등록했습니다"로 한 번).
       if (!store.ledger.firstRun) return;
       store.ledger.firstRun = false;
       if (n === 0) return;
       const from = INITIAL_SCAN_FROM.slice(0, 10);
       log(`첫 훑기: ${from} 이후 리플레이 ${n}건`);
-      showToast(`${from} 이후 리플레이 ${n}건을 스타게이트에 올립니다.`);
       notify("스타게이트 등록기", `${from} 이후 리플레이 ${n}건을 찾아 차례로 올려요. 끝나면 알려드릴게요.`);
     },
   });
@@ -162,13 +163,13 @@ async function handleFile(path: string): Promise<void> {
       store.ledger.files[path] = { at, status: "registered", matchNo: out.matchNo, note: out.summary };
       log(`등록 ${out.matchNo}: ${name} — ${out.summary}`);
       noteRecent(`✔ 등록 ${out.matchNo} · ${out.summary}`);
-      toastUploaded();
+      noteUploaded();
     } else if (out.kind === "merged" || out.kind === "duplicate") {
       store.ledger.files[path] = { at, status: out.kind, note: out.summary };
       log(`${out.kind === "merged" ? "기존 경기에 갱신" : "이미 등록됨"}: ${name} — ${out.summary}`);
       noteRecent(`${out.kind === "merged" ? "↻ 기존 경기 갱신" : "= 이미 등록됨"} · ${out.summary}`);
       // 다른 사람이 먼저 올린 같은 경기도 "올라갔다"로 센다 — 내 파일이 사이트에 반영된 건 같다.
-      if (out.kind === "merged") toastUploaded();
+      if (out.kind === "merged") noteUploaded();
     } else {
       store.ledger.files[path] = { at, status: "skipped", note: out.reason };
       log(`건너뜀: ${name} — ${out.reason}`);
