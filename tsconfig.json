@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "web/src/types/screp-js.d.ts", "web/src/utils/replayParser.ts", "web/src/utils/replayMemberMatch.ts", "web/src/constants/*.ts", "web/src/types/index.ts"]
+  "include": ["src", "web/src/types/screp-js.d.ts", "web/src/types/scplay.d.ts", "web/src/utils/replayParser.ts", "web/src/utils/replayMemberMatch.ts", "web/src/constants/*.ts", "web/src/types/index.ts"]
 }

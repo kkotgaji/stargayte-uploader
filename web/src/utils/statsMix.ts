@@ -1,22 +1,15 @@
-// 그 판에서 '무엇을 지었고 무엇을 뽑았고 무엇을 썼나'(요청: 통계의 건설·유닛·스킬 칸).
+// 통계 화면이 읽는 **생산 구성**의 꼴과, 그것을 그리는 데 필요한 것들.
+// 값을 만드는 코드는 여기 없다 — 만드는 쪽은 참값이다.
 //
-// 총량 하나(buildCount)로는 "많이 했다"까지밖에 못 말한다. 같은 300이라도 방어탑만 올린
-// 판과 병력만 뽑은 판은 전혀 다른 경기고, 기본 유닛만 굴린 사람과 마법 유닛까지 간 사람도
-// 다르다. 그래서 그 총량을 갈래별로 나눠, 그리고 이름별 원장(건물·유닛·스킬)과 공/방 단계까지
-// 함께 저장한다 — 보는 쪽은 비율을 그리고 많이 나온 다섯을 세기만 하면 된다.
+// 예전에는 이 파일이 리플레이 커맨드를 세어 값을 **만들기까지** 했다(statsMix).
+// 그 자는 셋을 못 했다: 저그 라바 다중 변태(커맨드 하나에 여러 마리라 적게 셌다),
+// 취소·실패(눌렀으면 셌다), 크립 콜로니→성큰 승격(두 번 세거나 한 번 세거나가 자의적).
+// 이제 값은 OpenBW가 그 경기를 그대로 돌려 **실제로 태어난 몸**을 세고(덤퍼의 ##STATS##)
+// 서버가 갈래로 나눠 내려 준다(api의 truthmix.py). 화면은 받아 그리기만 한다.
 //
-// 세는 단위는 buildCount와 같은 '커맨드'다(replayParser의 buildCount 주석 참고). 저그 라바
-// 여러 마리를 한 번에 변태시키면 커맨드가 하나라 실제 수보다 적게 세지는 한계도 그대로다 —
-// 어차피 비율로 읽는 값이라 갈래마다 같은 자로 재는 것이 중요하지, 절대 수가 중요하지 않다.
-
-import type { ReplayPlayerSignals } from "./replayParser";
-import { BUILDING_KO, TECH_KO, UNIT_KO } from "./replayNames";
-import { upgradeLevel, type UpgradeName } from "./replayTechNames";
-
-/** 초당 프레임(다른 파일들과 같은 값) — 초반 일꾼 수를 셀 때만 쓴다. */
-const SECONDS_PER_FRAME = 0.042;
-/** '초반 일꾼'을 세는 선(초) — 요청: 초반 5분까지의 일꾼 생산 수. */
-export const WORKER_EARLY_SEC = 5 * 60;
+// 유닛 갈래 집합(방어 건물·마법·공중)이 아직 여기 있는 까닭: 연속 재생(ReplayMotionPlayer)이
+// 화면에서 유닛을 가를 때 쓴다. 통계의 갈래 나누기는 서버(truthmix.py)가 하고 두 목록은
+// **같은 이름**으로 맞춰 뒀다 — 한쪽만 고치면 화면과 숫자가 어긋난다.
 
 /** 막는 건물 — 나머지 건물은 전부 '생산'으로 본다(요청: 건물 빌드 비율은 생산/방어).
  *  크립 콜로니는 성큰·스포어가 되기 전 단계라 방어로 센다. */
@@ -26,26 +19,13 @@ export const DEFENSE_BUILDINGS = new Set([
   "Creep Colony", "Sunken Colony", "Spore Colony",
 ]);
 
-const WORKER_UNITS = new Set(["SCV", "Probe", "Drone"]);
-/** 병력으로 세지 않는 것들 — 일꾼·보급·알·소모품. 비율을 흐리기만 한다. */
-export const NOT_ARMY = new Set([
-  ...WORKER_UNITS, "Larva", "Egg", "Overlord", "Cocoon", "Mutalisk Cocoon", "Lurker Egg",
-  "Interceptor", "Scarab", "Spider Mine", "Scanner Sweep", "Nuclear Missile",
-]);
-
 /** 마법 유닛 — 에너지를 쓰는 것이 그 유닛의 존재 이유인 것들. 메딕·고스트는 여기 안 넣는다:
  *  메딕은 바이오닉의 한 부분이고 고스트는 사실상 핵·락다운용이라 수가 아주 적어, 넣으면
  *  '마법 비중'이 그 사람의 운영이 아니라 종족을 말하는 값이 된다. */
 export const CASTER_UNITS = new Set([
   "High Templar", "Dark Archon", "Arbiter", "Science Vessel", "Defiler", "Queen",
 ]);
-/** 기본 유닛 — 첫 생산 건물에서 바로 나오는 것들. 나머지 전투 유닛은 전부 '고급'이다
- *  (테크 건물이나 추가 건물을 하나 더 거쳐야 나오는 것들). */
-const BASIC_UNITS = new Set([
-  "Marine", "Firebat", "Medic", "Vulture",
-  "Zealot", "Dragoon",
-  "Zergling", "Hydralisk",
-]);
+
 /** 하늘에 뜨는 것 — 오버로드는 위 NOT_ARMY에서 이미 빠진다. */
 export const AIR_UNITS = new Set([
   "Wraith", "Dropship", "Science Vessel", "Valkyrie", "Battlecruiser",
@@ -54,7 +34,10 @@ export const AIR_UNITS = new Set([
 ]);
 
 /** 한 사람의 그 경기 생산 구성. 값은 전부 커맨드 수이고, 보는 쪽은 비율로 읽는다. */
-export interface BuildMix {
+/* ★ 이름이 `TruthMix`였다 — 커맨드를 세던 시절의 말이다(build = 그 판의 '빌드' 커맨드).
+   그 원장은 걷혔고 이 값은 이제 **참값**에서 온다(서버 truth_mix): 실제로 태어난 몸을 센
+   값이라 '빌드'라고 부를 근거가 없다. 서버 칼럼 이름과도 이제 같다. */
+export interface TruthMix {
   /** 건물 — 생산(테크·확장 포함) / 방어. */
   bProd: number;
   bDef: number;
@@ -152,78 +135,7 @@ export interface BuildMix {
    남는 구간이 3분 미만이면 값을 안 낸다 — 8분도 안 되는 판에서 '주요시간대'라고 부를 만한
    구간이 없고, 짧은 판이 통계에 끼어드는 문제도 여기서 함께 막힌다(요청: 짧은 경기는
    자동으로 안 들어가겠지). */
-const CORE_HEAD_SEC = 240;
-const CORE_TAIL_SEC = 60;
-const CORE_MIN_SEC = 180;
 
-/** 그 경기의 주요시간대 — 프레임 구간과 길이(초). 낼 수 없으면 null. */
-export function coreWindowOf(totalFrames: number | null | undefined):
-  { from: number; to: number; seconds: number } | null {
-  if (!totalFrames || totalFrames <= 0) return null;
-  const from = CORE_HEAD_SEC / SECONDS_PER_FRAME;
-  const to = totalFrames - CORE_TAIL_SEC / SECONDS_PER_FRAME;
-  const seconds = (to - from) * SECONDS_PER_FRAME;
-  return seconds >= CORE_MIN_SEC ? { from, to, seconds: Math.round(seconds) } : null;
-}
-
-/** 새 값 하나. 상수를 spread 해서 쓰면 사전들이 같은 객체를 공유하므로 함수로 낸다. */
-export function emptyBuildMix(): BuildMix {
-  return {
-    bProd: 0, bDef: 0, uBasic: 0, uAdv: 0, uCaster: 0, uGround: 0, uAir: 0, worker5: 0,
-    upGw: 0, upGa: 0, upAw: 0, upAa: 0, upSh: 0, ups: {}, upCounts: {},
-    buildings: {}, units: {}, skills: {},
-    buildingSecs: {}, unitSecs: {}, skillSecs: {},
-    coreSeconds: null, coreCmd: 0, coreBuild: 0, coreUnit: 0,
-  };
-}
-
-/* 공/방/실드 — 종족별 이름을 '지상 공격 / 지상 방어 / 공중 공격 / 공중 방어 / 실드'
-   다섯 자리로 모은다. 한 자리에 이름이 여럿이면 그중 가장 높이 올라간 것을 쓴다. */
-const UP_LINES: Record<"upGw" | "upGa" | "upAw" | "upAa" | "upSh", UpgradeName[]> = {
-  upGw: ["Terran Infantry Weapons", "Terran Vehicle Weapons",
-         "Zerg Melee Attacks", "Zerg Missile Attacks", "Protoss Ground Weapons"],
-  upGa: ["Terran Infantry Armor", "Terran Vehicle Plating", "Zerg Carapace", "Protoss Ground Armor"],
-  upAw: ["Terran Ship Weapons", "Zerg Flyer Attacks", "Protoss Air Weapons"],
-  upAa: ["Terran Ship Plating", "Zerg Flyer Carapace", "Protoss Air Armor"],
-  upSh: ["Protoss Plasma Shields"],
-};
-
-/* 종족별 업그레이드 줄 — 키는 저장·조회 내내 그대로 쓰는 짧은 이름이고, 값은 screp의
-   업그레이드 이름이다. 한 판에는 그 사람이 고른 종족의 줄만 담긴다(0단계도 담는다 —
-   "안 올렸다"도 평균에 들어가야 하는 사실이라, 빼면 평균이 위로 뜬다).
-
-   줄이 종족마다 다른 만큼 화면도 종족마다 다른 표를 그린다(요청). 눈여겨볼 두 곳:
-   저그는 근접·원거리가 갑각(zCara) 하나를 나눠 쓰고, 프로토스는 실드가 지상·공중 공통이다
-   — 그래서 그 둘은 표에서 따로 한 줄로 뗀다(같은 값을 두 줄에 적으면 따로인 줄 오해한다). */
-export const UP_BY_RACE: Record<"테란" | "저그" | "프로토스", Record<string, UpgradeName>> = {
-  테란: {
-    tInfW: "Terran Infantry Weapons", tInfA: "Terran Infantry Armor",
-    tVehW: "Terran Vehicle Weapons", tVehP: "Terran Vehicle Plating",
-    tShipW: "Terran Ship Weapons", tShipP: "Terran Ship Plating",
-  },
-  저그: {
-    zMelee: "Zerg Melee Attacks", zMissile: "Zerg Missile Attacks", zCara: "Zerg Carapace",
-    zFlyW: "Zerg Flyer Attacks", zFlyA: "Zerg Flyer Carapace",
-  },
-  프로토스: {
-    pGrdW: "Protoss Ground Weapons", pGrdA: "Protoss Ground Armor",
-    pAirW: "Protoss Air Weapons", pAirA: "Protoss Air Armor",
-    pShield: "Protoss Plasma Shields",
-  },
-};
-
-/** 보급을 대는 건물 — 어느 판에서나 가장 많이 지어서 Top5의 1위를 늘 독차지한다(요청: 제외).
- *  저그 오버로드는 유닛이라 애초에 건물 목록에 없다. */
-const SUPPLY_BUILDINGS = new Set(["Pylon", "Supply Depot"]);
-
-/** 많이 나온 순 Top N. 이름은 영문 키로 저장돼 있으므로 부르는 쪽이 한국어 표기 사전을
- *  넘긴다 — 표기를 고치면 이미 등록된 경기도 다음 조회부터 새 표기로 읽히게 하기 위해서다
- *  (요약 문장이 저장된 문장 대신 저장된 사실을 두는 것과 같은 이유).
- *
- *  옮긴 뒤에 합치는 것이 중요하다: 탱크는 시즈/언시즈 두 영문명으로 오지만 한국어로는 둘 다
- *  "탱크"라, 먼저 순위를 매기면 "탱크"가 두 줄로 선다.
- *
- *  같은 수면 이름순으로 갈라 순서가 조회마다 흔들리지 않게 한다. */
 export function topEntries(
   d: Record<string, number> | undefined, ko: Record<string, string>, n: number,
   secs?: Record<string, number>, exclude?: Set<string>,
@@ -259,21 +171,6 @@ export function topEntries(
  *  topEntries와 같은 순서를 매기되 자르지 않는다: 지난달 6위였던 것이 이번 달 3위로 올라온
  *  경우, Top5만 들고 견주면 그 사실을 알 수가 없어 '새로 등장'으로 보인다. 값은 목록에
  *  실제로 실린 것만 담기므로, 여기 없는 이름은 지난달에 아예 안 나온 것이다. */
-export function topRanks(
-  d: Record<string, number> | undefined, ko: Record<string, string>,
-): Map<string, number> {
-  const merged: Record<string, number> = {};
-  for (const [key, v] of Object.entries(d ?? {})) {
-    const name = ko[key];
-    if (!name || !(v > 0)) continue;
-    merged[name] = (merged[name] ?? 0) + v;
-  }
-  const out = new Map<string, number>();
-  Object.entries(merged)
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .forEach(([name], i) => out.set(name, i + 1));
-  return out;
-}
 
 /** 1분(초) — 주요시간대 합계를 이 길이로 환산한다(요청: 모든 시간관련 지표를 주요시간대
  *  1분당으로, 단위 표시는 "단위/분"). 예전에는 10분이었는데, 경기 전체를 분모로 쓸 때는
@@ -284,69 +181,3 @@ export const PER_WINDOW_SECONDS = 60;
 /** 목록 한 줄 — 이름과 분당 값. 주요시간대를 못 잡은 경기뿐이면(짧은 판·옛 응답) null이라
  *  화면이 그 줄의 수를 뺀다. */
 export interface TopEntry { name: string; perMin: number | null }
-
-/** 커맨드 스트림에서 모은 재료(signals)로 그 경기의 구성을 낸다. 재료가 없으면 null. */
-export function buildMixOf(
-  s: ReplayPlayerSignals | null | undefined, totalFrames?: number | null,
-  /** 그 판에서 고른 종족 — 업그레이드 줄이 종족마다 달라, 이 값이 있어야 어느 줄을
-   *  담을지 정할 수 있다(위 UP_BY_RACE). 모르면 줄별 값은 비운다. */
-  race?: string | null,
-): BuildMix | null {
-  if (!s) return null;
-  const out = emptyBuildMix();
-  /* 도넛·Top5에 들어갈 수는 경기 전체로 센다(요청) — 주요시간대만 보면 마법처럼 드문
-     사건이 대부분 잘려 목록이 비고, 구성비도 초·후반을 뺀 반쪽 그림이 된다.
-     주요시간대는 '분당 얼마나 찍었나'에만 쓴다(아래 coreBuild·coreUnit·coreCmd) —
-     초반의 정해진 빌드와 끝난 뒤 정리 구간이 분모에 끼면 그 값이 눌리기 때문이다.
-     못 잡는 경기(길이를 모르거나 너무 짧은 판)는 coreSeconds가 null이라 분당 집계에서
-     빠진다. 프레임 목록이 없는 옛 재료에서는 총합으로 돌아간다 — 없는 걸 0으로 세면 그
-     사람의 기록이 통째로 사라진다. */
-  const core = coreWindowOf(totalFrames);
-  const inCore = (f: number) => !core || (f >= core.from && f <= core.to);
-  const countIn = (frames: number[] | undefined, total: number) =>
-    (frames ? frames.filter(inCore).length : total);
-
-  for (const [b, total] of Object.entries(s.buildingCounts)) {
-    const n = total;
-    if (n <= 0) continue;
-    if (DEFENSE_BUILDINGS.has(b)) out.bDef += n; else out.bProd += n;
-    if (BUILDING_KO[b] && !SUPPLY_BUILDINGS.has(b)) out.buildings[b] = (out.buildings[b] ?? 0) + n;
-  }
-  for (const [line, names] of Object.entries(UP_LINES) as [keyof typeof UP_LINES, UpgradeName[]][]) {
-    // 업그레이드 단계는 '얼마나 올렸나'라 구간과 무관하다 — 시간당으로 환산하는 값이 아니다.
-    out[line] = Math.max(...names.map((u) => upgradeLevel(s, u)));
-  }
-  /* 줄별 값 — 그 판의 종족 줄만, 0단계도 그대로 담는다. 위 다섯 자리와 달리 뭉개지 않아서
-     "보병은 3업인데 메카닉은 안 갔다"가 그대로 남는다. */
-  const lines = race ? UP_BY_RACE[race as keyof typeof UP_BY_RACE] : undefined;
-  if (lines) {
-    for (const [key, name] of Object.entries(lines)) out.ups[key] = upgradeLevel(s, name);
-  }
-  for (const [u, total] of Object.entries(s.unitCounts)) {
-    if (NOT_ARMY.has(u)) continue;
-    const n = total;
-    if (n <= 0) continue;
-    if (CASTER_UNITS.has(u)) out.uCaster += n;
-    else if (BASIC_UNITS.has(u)) out.uBasic += n;
-    else out.uAdv += n;
-    if (AIR_UNITS.has(u)) out.uAir += n; else out.uGround += n;
-    if (UNIT_KO[u]) out.units[u] = (out.units[u] ?? 0) + n;
-  }
-  for (const [t, total] of Object.entries(s.techUses)) {
-    if (TECH_KO[t] && total > 0) out.skills[t] = (out.skills[t] ?? 0) + total;
-  }
-  /* 초반 일꾼만은 정의 자체가 '초반 5분'이라 주요시간대와 무관하게 경기 앞쪽에서 센다. */
-  const early = WORKER_EARLY_SEC / SECONDS_PER_FRAME;
-  for (const u of WORKER_UNITS) {
-    out.worker5 += (s.unitFrames[u] ?? []).filter((f) => f <= early).length;
-  }
-  out.coreSeconds = core ? core.seconds : null;
-  /* '생산 커맨드'는 유닛+건물 생산 커맨드의 합이다(buildCount와 같은 정의) — 여기서는
-     주요시간대 것만 센 값이라 커맨드 칸도 다른 칸과 같은 자로 읽힌다. */
-  out.coreBuild = Object.entries(s.buildingCounts)
-    .reduce((n, [b, t]) => n + countIn(s.buildingFrames[b], t), 0);
-  out.coreUnit = Object.entries(s.unitCounts)
-    .reduce((n, [u, t]) => n + countIn(s.unitFrames[u], t), 0);
-  out.coreCmd = out.coreBuild + out.coreUnit;
-  return out;
-}

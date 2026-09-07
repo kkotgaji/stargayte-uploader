@@ -1,4 +1,4 @@
-import type { BuildMix } from "../utils/replayBuildMix";
+import type { TruthMix } from "../utils/statsMix";
 import type { ReplayMapGrid } from "../utils/replayParser";
 
 // ===== 도메인 공용 타입 =====
@@ -7,14 +7,23 @@ import type { ReplayMapGrid } from "../utils/replayParser";
 export type BaseRace = "테란" | "프로토스" | "저그";
 
 // 경기결과 시 선택 가능한 종족 (랜덤은 어떤 종족이 나왔는지 구분하지 않고 통일)
-export type Race = "테란" | "프로토스" | "저그" | "랜덤";
+/* 종족의 임자는 재생 패키지다(components/replay/race) — 그 패키지가 아는 유일한 앱 어휘라
+   거기 두어야 패키지가 이 파일을 안 끌고 간다. 앱은 여기서 그대로 읽는다. */
+import type { Race } from "scplay";
+
+export type { Race };
 
 // 경기 결과. not_held = 미실시(승패 없음, 통계 집계 제외)
-export type GameOutcome = "team1" | "team2" | "draw" | "not_held";
+// "unknown"(요청: 결과 모름) — 리플레이가 승자를 못 가린 판을 그대로 등록한다. 래더에선
+// 빠지고, 통계에선 전적·승률에만 안 센다(서버 schemas.GameOutcome과 짝).
+export type GameOutcome = "team1" | "team2" | "draw" | "not_held" | "unknown";
 
-// 경기유형 코드 (0101=일대일, 0102=팀전) — team1/team2 인원수와 별개로
-// 어떤 성격의 경기인지 분류하기 위한 값
-export type GameType = "0101" | "0102";
+/* 경기유형 코드 — team1/team2 인원수와 별개로 "어떤 성격의 판인가"를 적는 값.
+   0101 일대일 · 0102 팀전 · 0103 난투(프리 포 올).
+   ★ **이름·집계 규칙은 여기 안 적는다** — constants/gameTypes.ts의 표 하나가 다 진다.
+     유형이 늘 때 고칠 자리를 하나로 두려고 그렇게 나눠 놓았다(요청: "앞으로도 더
+     추가될 수도 있어"): 이 줄에 코드를 더하고, 그 표에 줄 하나를 더하면 끝이다. */
+export type GameType = "0101" | "0102" | "0103";
 
 // 회원 이용 상태 — 가입 시 pending, 운영자가 승인하면 active, 정지시키면 suspended
 export type MemberStatus = "pending" | "active" | "suspended" | "withdrawn";
@@ -87,6 +96,9 @@ export interface ReplayNameMappingEntry {
   // 이 이름이 마지막으로 등장한 경기 날짜(YYYY-MM-DD) — 미해결 항목을 최근 순으로 보여주는
   // 데 쓴다. 단건 저장 응답에서는 항상 null.
   lastSeen: string | null;
+  // 이 이름이 등장한 경기 수 — 미매핑 목록의 등장횟수순 정렬(요청)에 쓴다. 회원으로
+  // 연결된 이름과 단건 저장 응답에서는 null.
+  appearances?: number | null;
   // 이 게임아이디로 등록된 경기가 하나라도 있는지 — 있으면 휴지통(완전 삭제)이 막힌다.
   // 화면에서 삭제를 못 누르게 하고 경고를 띄운다. 단건 저장 응답에서는 false.
   hasMatches: boolean;
@@ -110,10 +122,8 @@ export interface GameResultSlot {
   // 커맨드 스트림에서 센 '생산' 지표(유닛 훈련+건물 건설+변태 커맨드 수). 커맨드 스트림을
   // 못 읽은 리플레이/수동 등록은 null.
   buildCount: number | null;
-  /** 그 '생산'의 구성(replayBuildMix.ts) — 건물 생산/방어, 병력 기본/고급/마법, 지상/공중,
-   *  초반 일꾼 수. 총량만으로는 "많이 했다"까지밖에 못 말해서 갈래를 따로 싣는다(요청).
-   *  리플레이 없이 등록한 경기와 이 값이 생기기 전 경기는 null이다. */
-  buildMix: BuildMix | null;
+  /* (걷음) buildMix — 경기 하나의 생산 구성은 이제 슬롯에 안 싣는다. 통계가 보는 값은
+     서버가 참값에서 낸 합계(MemberStats.truthMix)뿐이고, 그것은 아래에 그대로 있다. */
 }
 
 // 리플레이(.rep). 서버는 별도 replays 테이블에 풀 메타데이터로 저장하고 경기는 그 id로
@@ -209,6 +219,11 @@ export interface GameResult {
   team2: GameResultSlot[];
   result: GameOutcome;
   matchType: GameType; // 경기유형
+  /** 리플레이 머리말의 **게임 갈래 번호**(요청) — 멜리 2 · 일대일 4 · 유즈맵 10 ·
+   *  팀멜리 11 · Top vs Bottom 15. 우리가 매기는 matchType과 다른 것이다: 저것은 우리
+   *  판정이고 이것은 게임이 적어 둔 사실이다. 서버가 이 값으로 못 받는 갈래를 거른다.
+   *  수기 등록과 못 읽은 리플레이는 모르므로 **안 보낸다**(없으면 서버도 안 막는다). */
+  gameType?: number;
   replay: Replay | null; // 리플레이(.rep) — 없으면 수기등록
   createdBy: GameResultAuthor | null; // 작성자가 탈퇴 등으로 사라졌으면 null
   // 아래 3개는 리플레이 파싱으로만 채워진다 (수동 등록 경기는 항상 null)
@@ -219,6 +234,9 @@ export interface GameResult {
   // 오지 않고(같은 맵을 쓰는 경기가 수십 건이라 22KB짜리가 되풀이된다) 이 해시로 따로
   // 받아 온다(api.getReplayMaps). 리플레이 없는 수기 등록과 옛 경기는 null.
   mapHash: string | null;
+  // 이 맵이 묶인 대표맵 이름(서버가 목록에 실어 준다) — 격자 캐시가 오기 전에도 알약·머리줄이
+  // 처음부터 이 이름으로 선다(요청: 맵 이름이 중간에 바뀌지 않게). 안 묶였으면 null.
+  mapCanonName?: string | null;
   // 게임 상세 페이지 조회수(요청) — 페이지가 열릴 때마다 서버가 1씩 늘린다.
   viewCount?: number;
 }
@@ -264,18 +282,20 @@ export interface MemberStats {
   avgEcmd: number | null;
   // 경기당 평균 '생산'(유닛 훈련+건물 건설+변태 커맨드 수). 리플레이 등록 경기만 반영, 없으면 null.
   avgBuild: number | null;
-  /** 그 기간 경기들의 생산 구성 합계(replayBuildMix.ts) — 도넛 셋을 그리는 값이다.
+  /** 그 기간 경기들의 생산 구성 합계(statsMix.ts) — 도넛 셋을 그리는 값이다.
    *  구성이 실린 경기가 하나도 없거나 표본이 모자라면 null. */
-  buildMix: BuildMix | null;
+  truthMix: TruthMix | null;
+  /** (옛 이름) 서버가 `truthMix`로 바뀌기 전까지만 — 두 리포가 따로 배포돼서다. */
+  buildMix?: TruthMix | null;
   /** 경기당 초반(5분) 일꾼 수(요청). 위와 같은 조건에서 null. */
   avgWorker5: number | null;
-  /** buildMix에 실제로 더해진 경기 수 — 합계를 경기당 값으로 되돌릴 때 쓴다(평균 건설 수,
+  /** truthMix에 실제로 더해진 경기 수 — 합계를 경기당 값으로 되돌릴 때 쓴다(평균 건설 수,
    *  공/방 평균 단계). 서버가 합계만 주고 나눗셈은 화면이 하는 이유는, 무엇을 무엇으로
    *  나눌지가 칸마다 다르기 때문이다(비율은 합계 그대로, 수치는 경기당). */
   mixPlays: number | null;
   /** 그 경기들의 '주요시간대' 총 길이(초) — 총합을 1분당 값으로 되돌릴 분모다(요청:
    *  시간에 영향받는 값은 모두 주요시간대 1분당). 초반 4분과 막판 1분을 뺀 구간이고, 그
-   *  구간이 3분도 안 되는 짧은 경기는 아예 안 쌓인다(replayBuildMix의 coreWindowOf).
+   *  구간이 3분도 안 되는 짧은 경기는 아예 안 쌓인다(statsMix의 coreWindowOf).
    *  옛 경기에는 없다 — 운영 > 제어판의 '경기 재분석'을 돌려야 채워진다. */
   mixSeconds: number | null;
   /** 공/방/실드 평균 단계만의 분모 — 위 mixPlays와 따로 둔다. 3단계까지 올리려면 일정
@@ -338,8 +358,24 @@ export interface RivalryPair {
   draws: number;
 }
 
+/** 분포 한 줄 — 이름과 판수, 비율(%). 비율은 서버가 낸다(분모가 다섯 개의 합이 아니라
+ *  그 분포가 센 판 전체라, 다섯 줄만 받는 화면에서는 되돌릴 수가 없다). */
+export interface ClanBreakdownEntry {
+  label: string;
+  plays: number;
+  ratio: number;
+}
+
 export interface GameResultStatsResponse {
   members: MemberStatsEntry[];
+  /** 클랜 전체 한 줄(요청) — 회원별 값을 다시 평균 낸 것이 아니라 **같은 경기 행을 통째로
+   *  한 번 더 묶은** 값이다. memberId는 빈 문자열이다(사람이 아니다). */
+  clan: MemberStatsEntry;
+  /** 맵·유형 분포 다섯씩(요청). 참가자가 아니라 **경기** 단위로 센 값이다. 범위는 편을
+   *  갈라 붙은 판 — 팀전과 난투다(1:1은 래더가 보는 판이라 뺐다). 맵 이름은 리플레이
+   *  원본이 아니라 사람이 지어 둔 대표 이름이다(원본을 쓰면 아류가 저마다 한 줄씩 선다). */
+  clanMaps: ClanBreakdownEntry[];
+  clanFormats: ClanBreakdownEntry[];
 }
 
 // 팀랭킹(GET /api/game-results/team-ranking) — 실제로 같은 편이었던 2인 이상 구성 하나가 한 행이다.
@@ -370,7 +406,58 @@ export interface TeamRankingResponse {
 // 한때 하나였던 "stats"가 둘로 갈렸다(요청: 래더와 내전은 메뉴 진입점부터 다르다).
 //   "ladder" — 일대일 리더보드. 통계가 아니다: 줄 세운 순위표 하나가 화면의 전부다.
 //   "clan"   — 내전 통계. 레이팅·순위가 없고 전적·생산·칭호를 본다.
-export type ScreenKey = "activity" | "ladder" | "clan" | "members" | "leagues" | "minimaps" | "control" | "models";
+/* 화면 열쇠 — "minimaps"는 이제 **대표맵** 화면이다(라벨은 AdminMenu에 있다). 열쇠 글자를
+   그대로 두는 까닭: 이 값은 회원마다의 권한 행에 저장돼 있어서, 바꾸면 이미 권한을 받은
+   사람들이 그 화면을 통째로 못 본다. 사람이 보는 글자가 아니라 **저장된 식별자**다. */
+export type ScreenKey = "activity" | "ladder" | "clan" | "members" | "leagues" | "minimaps" | "control" | "scraps" | "guide";
+/** 위 열쇠를 **값으로** 늘어놓은 것 — 주소에서 읽은 글자가 참인지 가릴 때 쓴다.
+ *  열쇠 곁에 두는 까닭: 이 목록은 여태 App 안에만 있었는데, 주소를 읽는 자리가 App
+ *  하나가 아니게 되면서(스토어의 screenBack) 목록이 갈릴 자리가 생겼다. 한 벌만 둔다. */
+export const SCREEN_KEYS: ScreenKey[] = ["activity", "ladder", "clan", "members",
+  "leagues", "minimaps", "control", "scraps", "guide"];
+
+/* ── 외부 공유(요청: "외부 외부 공유용 리플레이 재생 목록") ────────────────────────────
+   클럽 기록과 **표부터 다른 자리**다. 까닭은 서버 쪽 주석에 있다(extShare/models.py):
+   클럽 경기의 참가자는 회원을 가리키는 NOT NULL이라, 인터넷에 공개된 프로 리플레이의
+   선수는 애초에 들어갈 자리가 없다. 그래서 외부 공유는 제 표에 살고, 화면도 로고·메뉴
+   없는 한 장짜리다. */
+/** 재생 목록 하나 — 비밀번호·차례는 제어판이 볼 때만 실려 온다(문 앞에서는 안 나간다). */
+export interface ExtShareList {
+  id: number;
+  name: string;
+  gameCount: number;
+  /** 비밀번호가 걸려 있나 — 비어 있으면 그냥 열린다(운영자가 그렇게 두었다는 뜻). */
+  locked: boolean;
+  password?: string;
+  sortOrder?: number;
+}
+
+/** 외부 공유 경기 한 판 — 알맹이는 GameResult 그 꼴 그대로다(서버가 payload를 그대로 낸다).
+ *  덧붙는 셋만 이 화면의 것이다. */
+export type ExtShareGame = GameResult & {
+  listId: number;
+  sortOrder: number;
+  /** 사람이 지은 제목(요청) — 비면 **보여주는 화면이** 선수 이름으로 짓는다(scplayer의
+   *  gameTitleOf). 서버도 이 앱도 대체 이름을 안 짓는다(지시) — 기계가 지은 이름을 이
+   *  칸에 실으면 "이 제목 누가 정했나"를 못 가린다. */
+  title: string;
+  /** 참값 자취를 이미 구웠나 — 제어판이 굽기 버튼을 켜고 끄는 데 쓴다. */
+  hasTracks: boolean;
+};
+
+/** 스크랩해 둔 장면 하나(요청: "장면 스크랩 기능") — 담는 것은 공유 버튼이 만드는 그
+ *  **주소 한 줄**이다(경기 번호·재생 시각·보던 자리·각도가 이미 거기 다 실려 있다).
+ *  주소는 출처 없이(경로+질의) 오므로 여는 쪽이 지금 origin을 앞에 붙인다. */
+export interface SceneScrap {
+  id: number;
+  /** 사람이 붙인 제목 — 안 붙였으면 공유 미리보기와 같은 제목이 들어와 있다. */
+  title: string;
+  /** 공유 미리보기의 설명 줄(맵 · 경기시간 · 장면 시각). 없으면 빈 문자열. */
+  subtitle: string;
+  link: string;
+  gameNo?: string | null;
+  createdAt: string;
+}
 
 // 랭킹/경기결과/전적통계 등 화면·메뉴 구성을 어느 버전 세트로 보여줄지 — 제어판에서 등록된
 // 버전 중 하나로 배포하면 앱 전체가 즉시 바뀐다(개인별 설정이 아니라 서버에 저장된 전역 값).
@@ -494,7 +581,13 @@ export type LeagueMode = "team" | "individual";
 export type LeagueStatus = "setup" | "active" | "completed";
 export type LeagueMatchSide = "a" | "b";
 
+export type LeaguePoolKind = "member" | "guest" | "computer";
+
 export interface LeagueRosterMember {
+  /** 이 자리에 앉은 선수풀 항목 — 끌어다 놓을 때 화면이 가리키는 열쇠다. */
+  poolId: number;
+  kind: LeaguePoolKind;
+  /** 회원일 때의 login id. 비회원·컴퓨터는 빈 문자열이다. */
   memberId: string;
   nickname: string;
   battletag: string;
@@ -502,9 +595,24 @@ export interface LeagueRosterMember {
   position: number;
 }
 
+/** 선수풀 한 자리 — 리그의 참가자 명단(요청: 팀 짜기 전에 선수 추가).
+ *  회원만 뛰는 게 아니라 비회원·컴퓨터도 있다(요청) — 그래서 로스터·세트 명단이 회원이
+ *  아니라 **이 풀**을 가리킨다. */
+export interface LeaguePoolMember {
+  id: number;
+  kind: LeaguePoolKind;
+  /** 회원일 때의 login id. 비회원·컴퓨터는 빈 문자열이다. */
+  memberId: string;
+  nickname: string;
+  battletag: string;
+  avatar: string | null;
+}
+
 export interface LeagueTeam {
   id: number;
-  label: string; // A~F
+  label: string; // A, B, ... Z, AA, ...
+  /** 이 팀의 자리 수(요청: 팀 명수 설정) — 로스터는 이보다 적을 수 있다(빈 칸). */
+  size: number;
   roster: LeagueRosterMember[];
 }
 
@@ -534,6 +642,10 @@ export interface LeagueMatch {
   setsWonA: number | null;
   setsWonB: number | null;
   winnerTeamId: number | null;
+  /** 경기 메모(요청) — 세트 정보처럼 진행이 리그마다 다른 것을 여기에 그대로 적는다.
+   *  한때 이 자리에 로우(세트) 표가 있었는데, 서버가 진행의 모양을 정해 주면 그 틀에 안 맞는
+   *  리그가 반드시 나와 적을 자리 자체가 없어졌다 — 자유롭게 적는 칸 하나가 무엇이든 담는다. */
+  note: string;
   substitutions: LeagueMatchSubstitution[];
 }
 
@@ -541,7 +653,6 @@ export interface League {
   id: number;
   name: string;
   mode: LeagueMode;
-  bestOf: number;
   status: LeagueStatus;
   // 대진표 생성 전엔 null — 생성 시점에 관리자가 정한 team_count 기준 다음 2의
   // 거듭제곱으로 확정된다.
@@ -550,6 +661,8 @@ export interface League {
   plannedTeams: number | null;
   // 대진(시드)이 확정됐는지 — true면 1라운드 슬롯을 더 이상 바꿀 수 없다.
   bracketLocked: boolean;
+  /** 선수풀 — 팀에 앉기 전의 참가자 전원. */
+  pool: LeaguePoolMember[];
   teams: LeagueTeam[];
   matches: LeagueMatch[];
   createdAt: string;
@@ -566,24 +679,36 @@ export interface LeagueListItem {
 export interface LeagueCreatePayload {
   name: string;
   mode: LeagueMode;
-  bestOf?: number;
+  /* (걷어냄) bestOf — 몇 판제라는 값 자체가 없어졌다(요청: 경기 방식 제거). 세트 정보는
+     경기의 메모(LeagueMatch.note)에 사람이 그대로 적는다. */
 }
 
 export interface LeagueUpdatePayload {
   name?: string;
-  bestOf?: number;
 }
 
-// 미니맵 그림(운영자가 맵마다 한 번 올려 두는 실제 미니맵) — 리플레이의 타일 번호만으로는
-// 물·풀·땅·벽을 갈라낼 수 없어서(네 번 시도해 다 실패) 사람이 그림을 올려 두고 그 위에
-// 아바타·화살표를 얹는다(요청). 이름·판본만 다른 거의 같은 맵들은 한 그림을 함께 쓴다.
-export interface MinimapImage {
+/** 팀구성 일괄 저장의 한 팀 — id가 없으면 새 팀.
+ *  roster는 **자리 단위**다: 선수풀 id를 자리 순서대로 담되 빈 칸은 null이다(요청 4·5의
+ *  "칸 아무 곳에나 끌어다 놓기"와 "서로 맞바꾸기"가 이 모양이라야 뜻이 산다). */
+export interface LeagueTeamCompositionEntry {
+  id: number | null;
+  size?: number;
+  roster: (number | null)[];
+}
+
+
+
+// 대표맵 한 줄 — "빠른무한"·"투혼" 같은 **상위 이름**이다. 이름·판본만 다른 거의 같은 맵
+// 격자 여럿이 이 한 줄에 묶이고, 통계의 맵 순위가 그 묶음으로 선다(요청).
+//
+// 한때 이 표는 '사람이 올려 둔 미니맵 그림'이었다. 지형이 참값으로 바뀌면서
+// (ReplayMapGrid.terrain) 그림도 그 어림을 담던 칸도 설 자리가 없어졌다 — 남은 일은
+// 이름을 묶는 것 하나다.
+export interface MapCanon {
   id: number;
   name: string;
-  /** data URL. */
-  image: string;
-  /** 지형(이동 가능/불가) 격자 — 운영자가 검수·수정한 값(요청). JSON 문자열({w,h,hex}). */
-  walk?: string | null;
+  /** 이 대표맵에 묶인 경기 수 — 어느 것부터 묶을지 정하는 기준. */
+  matches?: number;
 }
 
 /** 제어판 맵 목록의 한 줄 — 격자(22KB)는 빼고 어떤 맵이 있는지만. */
@@ -592,14 +717,18 @@ export interface MapCatalogEntry {
   name: string | null;
   width: number;
   height: number;
-  /** 이 맵으로 치른 경기 수 — 어느 맵부터 그림을 올릴지 정하는 기준. */
+  /** 이 맵으로 치른 경기 수 — 어느 맵부터 묶을지 정하는 기준. */
   matches: number;
-  imageId: number | null;
+  /** 이 격자가 묶인 대표맵. 안 묶였으면 null이라 통계에 원본 이름으로 선다. */
+  canonId: number | null;
+  /** 맵 데이터에서 뽑은 참값 지형이 구워져 있나(요청: 지형 버튼이 맵마다 하나씩) —
+   *  목록에는 있는지만 온다. 격자 자체는 재생 화면이 따로 묻는다. */
+  hasTerrain?: boolean;
 }
 
 export interface MapCatalog {
   maps: MapCatalogEntry[];
-  images: MinimapImage[];
+  canons: MapCanon[];
 }
 
 /** 활동 목록의 아이템 하나 — 너 나와·랭크 변동·게임결과가 같은 것이다(요청).

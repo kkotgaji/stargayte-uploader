@@ -1,8 +1,7 @@
 // 서버 호출 — 홈페이지의 src/api/client.ts와 같은 경로·형식을 쓰되, 브라우저 저장소·리프레시
 // 회전 없이 앱용 장기 토큰(POST /api/auth/app-login) 하나를 Bearer로 붙인다.
-import type { BuildMix } from "../web/src/utils/replayBuildMix";
 import type { ReplayMapGrid } from "../web/src/utils/replayParser";
-import type { GameResultSlot, Member, NewGameResult, ReplayNameClassificationEntry } from "../web/src/types";
+import type { GameResultSlot, Member, NewGameResult, ReplayNameClassificationEntry, ReplayUpload } from "../web/src/types";
 import { VERSION } from "./config";
 
 export class ApiError extends Error {
@@ -17,7 +16,11 @@ export interface AppLoginResult {
   user: Member;
 }
 
+/** 중복 경기 머지 — 홈페이지 replayDraft.ts의 draftToMergePayload와 같은 꼴. */
 export interface MergeReplayPayload {
+  /** 새 저장본 파일 — 서버가 지금 것보다 길 때만 갈아 끼우고(늦게 나간 사람의 저장본이
+   *  더 길다) 다시 굽는다. 짧으면 병합을 통째로 접는다. */
+  replay: ReplayUpload | null;
   gameStartedAt: string;
   result: "team1" | "team2" | "draw" | null;
   mapName: string | null;
@@ -25,7 +28,7 @@ export interface MergeReplayPayload {
   mapData: ReplayMapGrid | null;
   players: {
     playerName: string; race: string | null; apm: number | null; eapm: number | null;
-    cmdCount: number | null; effectiveCmdCount: number | null; buildCount: number | null; buildMix: BuildMix | null;
+    cmdCount: number | null; effectiveCmdCount: number | null; buildCount: number | null;
   }[];
 }
 

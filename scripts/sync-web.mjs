@@ -6,9 +6,10 @@ import { execSync } from "node:child_process";
 import { dirname, join } from "node:path";
 
 const FILES = [
-  "src/utils/replayParser.ts", "src/utils/replayBattles.ts", "src/utils/replayBuildMix.ts",
-  "src/utils/replayTechNames.ts", "src/utils/replayTactics.ts", "src/utils/replayNames.ts",
-  "src/utils/date.ts", "src/utils/replayMemberMatch.ts",
+  "src/utils/replayParser.ts", "src/utils/replayTechNames.ts", "src/utils/replayTactics.ts",
+  "src/utils/replayNames.ts", "src/utils/date.ts", "src/utils/replayMemberMatch.ts",
+  // types/index.ts가 TruthMix 꼴을 여기서 가져온다(타입만).
+  "src/utils/statsMix.ts",
   "src/constants/computerSlot.ts", "src/constants/unregisteredSlot.ts",
   "src/types/index.ts", "src/types/screp-js.d.ts",
 ];

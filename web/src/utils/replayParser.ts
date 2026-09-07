@@ -5,8 +5,6 @@
 // 중단됐지만(→ screp-ts) 그건 Go 바이너리를 Node에서 실행하는 CLI 래퍼라 브라우저에서 못
 // 쓴다 — 그래서 이 앱은 계속 screp-js를 쓴다.
 import { fmt } from "./date";
-import { battleCountsOf } from "./replayBattles";
-import { buildMixOf, type BuildMix } from "./replayBuildMix";
 import {
   normalizeUpgradeName, CAST_ORDER_TO_TECH, USE_CMD_TO_TECH, PLACE_MINE_ORDER,
   CAST_ORDER_TO_UNIT, USE_CMD_TO_UNIT,
@@ -41,9 +39,10 @@ export interface ParsedReplayPlayer {
   // 정확한 유닛 수가 아님을 유의: 저그 라바 여러 마리를 한 번에 변태시키면 커맨드는 1개라
   // 실제 생산량보다 적게 세질 수 있다(어림 지표).
   buildCount: number | null;
-  /** 그 '생산'을 갈래별로 나눈 값(replayBuildMix.ts) — 건물 생산/방어, 병력 기본/고급/마법,
-   *  지상/공중, 초반 일꾼 수. 커맨드 스트림을 못 읽은 리플레이면 null. */
-  buildMix: BuildMix | null;
+  /* (걷음) buildMix — 생산 구성은 이제 커맨드가 아니라 **참값**이 낸다. OpenBW가 그 경기를
+     그대로 돌려 실제로 태어난 몸을 세고(덤퍼의 ##STATS##), 서버가 갈래로 나눠 참가자 행에
+     싣는다(api의 truthmix.py). 등록이 보내던 값은 커맨드 어림이라 자가 아예 달랐다 —
+     대역으로 남겨 두면 두 자가 한 평균에 섞인다. */
   // 리플레이 슬롯 타입이 "Computer"(AI)인 참가자 — 배틀태그가 있을 리 없으니 회원 매칭을
   // 아예 시도하지 않고 컴퓨터 슬롯으로 바로 채운다.
   isComputer: boolean;
@@ -230,38 +229,25 @@ export interface ReplayPlayerSignals {
  *
  *  담는 형태가 팔레트+바이트인 이유는 크기다: 한 맵에 나오는 타일 그룹은 서른 몇 종류뿐이라
  *  1바이트 첨자로 접힌다(실측 128×128 맵: 숫자 배열 JSON 63KB → base64 22KB → gzip 1.1KB). */
-export interface ReplayMapGrid {
-  /** 격자 내용의 해시 — 서버에서 같은 맵을 두 번 저장하지 않게 하는 열쇠다(요청: 같은
-   *  맵이면 미니맵 하나를 함께 쓰자). 이름이 아니라 내용이 기준이다. */
-  hash: string;
-  /** 그 리플레이에 적혀 있던 맵 이름(사람이 DB를 볼 때의 단서). */
-  name: string;
-  width: number;
-  height: number;
-  /** 이 맵에 나오는 타일 그룹 번호들 — tiles의 각 바이트가 이 배열의 첨자다. */
-  palette: number[];
-  /** width*height개의 팔레트 첨자를 바이트로 늘어놓고 base64로 옮긴 것. */
-  tiles: string;
-  /** 자원 자리(앞마당·멀티) — 미네랄 밭과 가스를 가까운 것끼리 묶어 '한 자원 지대'로 만든
-   *  것이다(요청: 자원 위치 파악). 낱개 미네랄 400개를 다 그리면 노이즈라, 묶어서 지대
-   *  중심만 남긴다. [타일x, 타일y, 가스있음(0/1)]. 못 읽었으면 빈 배열. */
-  resources: [number, number, 0 | 1][];
-  /** 사람이 올려 둔 실제 미니맵 그림(data URL) — 있으면 격자 대신 이걸 그린다(요청: 물·풀·
-   *  땅·벽을 실제와 비슷하게). 서버에서 내려오는 값이라 리플레이를 읽어 만들 때는 없다. */
-  image?: string | null;
-  /** 그 그림의 지형(이동 가능/불가) 격자 — 운영자가 검수·수정한 값(요청). JSON 문자열. */
-  walk?: string | null;
-  /** 그 그림의 번호 — 재생 화면의 지형 수정 버튼이 저장할 곳(요청: 아무나 업데이트). */
-  imageId?: number | null;
-  /** 그 그림의 이름 — 지형 검수 창 제목이 리플레이 원본 이름(제어문자 섞임) 대신 쓰는
-   *  대표맵 이름(요청). */
-  imageName?: string | null;
-}
+/* 지도 격자의 꼴은 **재생기가 들고 있다**(components/replay/mapGrid) — 파서는 그것을 채워
+   낼 뿐이라, 꼴의 임자는 그 자료를 쓰는 쪽이다. 여기서 다시 내보내는 까닭은 앱의 여덟 곳이
+   이미 이 자리에서 읽고 있기 때문이다(부르는 쪽을 안 흔든다). */
+import type { ReplayMapGrid } from "scplay";
+
+export type { ReplayMapGrid };
 
 export interface ParsedReplay {
   fileName: string;
   date: string; // YYYY-MM-DD (리플레이 시작 시각의 로컬 날짜)
   mapName: string;
+  /** 리플레이 머리말의 **게임 갈래 번호** 그대로 — 멜리 2 · 일대일 4 · 유즈맵 10 ·
+   *  팀멜리 11 · Top vs Bottom 15(실측으로 확인한 값이다).
+   *  ★ 우리가 매기는 경기유형(matchType)과 **다른 것**이다: 저것은 우리가 로스터를 보고
+   *    내리는 판정이고, 이것은 사람이 로비에서 고른 것을 게임이 적어 둔 사실이다.
+   *    서버가 등록 때 이 값을 보고 못 받는 갈래를 거른다(유즈맵). 못 읽었으면 null. */
+  gameTypeId: number | null;
+  /** 그 갈래의 이름(screp의 것) — 사람에게 보일 말에 쓴다. 못 읽었으면 빈 글자. */
+  gameTypeName: string;
   gameStartedAt: string | null; // ISO 8601, 리플레이의 실제 시작 시각
   durationSeconds: number | null;
   // 확정 근거(Observer 플래그/슬롯 타입/3번째 이후 팀 번호)로 걸러낸 관전자만 뺀다 —
@@ -288,6 +274,11 @@ export interface ParsedReplay {
   // 복구할 방법이 없다). true면 team1에 전원이, team2는 비어있다 — 검토 화면에서 반드시
   // 사람이 직접 편을 갈라야 한다.
   teamSplitUncertain: boolean;
+  /** 프리 포 올(밀리 난투) — 편이 셋 이상이라 두 편으로 못 나누는 판이다(요청: "밀리경기는
+   *  팀 없이 개인전이라고 표시하고 승리자 고르게"). 이 표시가 서면 검토 화면은 편 가르기를
+   *  **요구하지 않고**, 대신 '이긴 사람'만 고르게 한다: team1 자리가 승자, team2 자리가
+   *  나머지 전원이다. 경기 유형은 팀전이 아니라 개인전으로 적는다. */
+  ffa: boolean;
   /** 맵의 지형 격자 — 못 읽었으면 null이고, 그때는 그 경기에 미니맵이 안 붙는다. */
   mapGrid: ReplayMapGrid | null;
   /** 맵에 있는 '모든' 시작 지점(타일) — 이번 판에 아무도 안 앉은 자리까지 포함한다. 맵의
@@ -397,6 +388,10 @@ interface ScrepResult {
     Map: string;
     Frames: number;
     Players: ScrepPlayer[];
+    /** 로비에서 고른 경기 유형 — Melee · Free For All · Top vs Bottom · Team Melee ·
+     *  Use Map Settings … (screp의 GameType). **편이 있는 판인지**를 가르는 유일한
+     *  참값이라, 사람 구조의 Team 칸보다 이쪽이 세다(아래 편 나누기 주석). */
+    Type?: { Name?: string; ID?: number };
     /** 맵 크기(타일). 시작 지점 좌표는 타일×32이라, 가운데를 잴 때 32를 곱해 쓴다. */
     MapWidth?: number;
     MapHeight?: number;
@@ -1138,7 +1133,20 @@ const MAP_PALETTE_MAX = 256;
 async function readMapGrid(res: ScrepResult): Promise<ReplayMapGrid | null> {
   const w = res.Header.MapWidth;
   const h = res.Header.MapHeight;
-  const raw = res.MapData?.Tiles ?? null;
+  const raw0 = res.MapData?.Tiles ?? null;
+  /* ★ 타일이 **가로×세로보다 길 수 있다**(지적: 외부 공유로 올린 판의 맵 해시가 null로
+     내려오고 재생기가 아무 반응이 없다) ─────────────────────────────────────────────
+     여태 `!== w * h`면 통째로 버렸다. 그런데 CHK의 타일 구획(MTXM)은 맵 편집기가 뒤에
+     여분을 붙여 두는 일이 있다 — 실측한 "Styler 빠른무한 5.0"(128×128)이 16388칸으로,
+     딱 4칸 길었다. 버려진 격자는 mapData: null로 올라가고, 그러면 서버에 맵 해시가 안
+     남아 재생기가 그릴 지형을 못 찾는다. 신고된 증상 둘이 한 줄에서 나왔다.
+     원작도 앞에서 w×h칸만 읽는다 — 뒤는 안 본다. 그래서 **앞에서 필요한 만큼만** 쓴다.
+     어느 쪽을 버릴지는 재서 정했다: 뒤를 버리면 좌우 대칭 어긋남이 15.9%인데 앞을
+     버리면 34.4%로 갑절이 된다(대칭 맵이다). 버려지는 값도 앞은 [66,66,66,66]인 실제
+     타일이고 뒤는 [0,0,0,0]인 여백이다.
+     모자란 것은 여전히 버린다 — 없는 칸은 지어낼 수 없다. 손에 있는 66건 중 65건은
+     정확히 같고 이 한 건만 길었다. */
+  const raw = raw0 && w && h && raw0.length > w * h ? raw0.slice(0, w * h) : raw0;
   if (!w || !h || !raw || raw.length !== w * h) return null;
   if (!globalThis.crypto?.subtle) return null;
 
@@ -1312,8 +1320,6 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
         cmdCount: desc?.CmdCount ?? null,
         effectiveCmdCount: desc?.EffectiveCmdCount ?? null,
         buildCount: buildCountOf(p.ID),
-        // 그 총량을 갈래별로 나눈 값(요청: 통계 생산 칸의 도넛 셋 + 초반 일꾼 수).
-        buildMix: buildMixOf(signalsOf(p.ID), totalFrames, RACE_NAME_MAP[p.Race?.Name ?? ""] ?? ""),
         isComputer: p.Type?.Name === "Computer",
         startX: startTileOf(p.SlotID)?.x ?? null,
         startY: startTileOf(p.SlotID)?.y ?? null,
@@ -1321,20 +1327,29 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
       };
     });
 
-  /* 전투 하나하나의 승패(요청) — 사람 혼자의 신호로는 못 가른다(상대가 같은 자리를 찍고
-     있었어야 전투다). 전원이 모인 여기서 게임 단위로 가려, 각자의 buildMix에 실어 준다 —
-     저장·집계 길은 buildMix가 이미 낸 길 그대로다. */
-  const battleCounts = battleCountsOf(declared);
-  declared.forEach((p) => {
-    const c = battleCounts.get(p.rawName);
-    if (c && p.buildMix) p.buildMix = { ...p.buildMix, ...c };
-  });
+  /* (걷음) 전투 원장 — 커맨드에서 "공격 명령이 몰린 자리"로 교전을 어림하던 값이다.
+     리플레이에는 전투도 죽음도 안 남아서 그렇게 셀 수밖에 없었는데, 참값에는 둘 다 있다.
+     지금 화면에서 쓰는 곳이 없어 그냥 걷는다 — 필요해지면 어림이 아니라 참값으로 다시 센다. */
 
   // (1) 팀 번호가 세 개 이상이면 앞의 두 팀만 실제로 붙은 편이다 — 옵저버 맵에서 관전자는
   // 그다음 팀 번호로 밀려난다(screp의 computeUMSTeams도 관전자에게 Team=3을 준다). 예전엔
   // "첫 팀 = team1, 나머지 전부 = team2"로 뭉뚱그려서 관전자가 team2에 그대로 딸려 들어갔다.
   const declaredTeamIds = [...new Set(declared.map((p) => p.team))].sort((a, b) => a - b);
-  const playingTeamIds = declaredTeamIds.slice(0, 2);
+  /* ★ **프리 포 올을 잘라 내지 않는다**(지적: "프리포올 밀리 경기가 등록이 안돼") ────────
+     위 (1)번은 '팀이 셋 이상이면 셋째부터는 관전자'라는 전제로 앞 두 팀만 남긴다. 관전
+     맵에서는 맞는 전제인데, **밀리 프리 포 올**에서는 참가자마다 팀 번호가 제 것이라
+     (1·2·3·4) 셋째·넷째 사람이 통째로 잘려 나간다. 그러면 넷이 싸운 판이 조용히 둘만
+     남은 1:1로 등록되고, 이긴 사람이 잘린 쪽이면 승패까지 어긋난다.
+     둘을 가르는 것은 팀 번호가 아니라 **그 팀에 실제로 친 사람이 있나**다: 관전자는
+     유효 명령이 거의 없고(OBSERVER_ECMD_RATIO), 참가자는 있다. 컴퓨터는 명령이 안
+     잡히는 판이 있어 따로 통과시킨다.
+     남는 팀이 둘 미만이면(유효 명령을 아예 못 읽은 리플레이) 옛 어림으로 물러난다. */
+  const maxEcmd9 = Math.max(0, ...declared.map((x) => x.effectiveCmdCount ?? 0));
+  const teamPlayed9 = (tid: number): boolean => declared.some((x) => x.team === tid
+    && (x.isComputer || (maxEcmd9 > 0 && (x.effectiveCmdCount ?? 0) > maxEcmd9 * OBSERVER_ECMD_RATIO)));
+  const realTeamIds9 = declaredTeamIds.filter(teamPlayed9);
+  const playingTeamIds = declaredTeamIds.length > 2 && realTeamIds9.length >= 2
+    ? realTeamIds9 : declaredTeamIds.slice(0, 2);
   const onPlayingTeam = declared.filter((p) => playingTeamIds.includes(p.team));
 
   // 일부 UMS 맵("슈퍼빨무" 등)은 관전 슬롯이 함께 있으면 screp이 실제 참가자 전원에게도
@@ -1343,7 +1358,36 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
   // 의미가 없으니, 아예 "자동으로 못 나눴다"는 신호를 남겨 검토 화면이 사람에게 직접
   // 편을 가르게 한다(실제로 지적받은 문제 — 관전자 섞인 슈퍼빨무 리플레이에서 팀이
   // 하나로 뭉쳐 나왔다).
-  const teamSplitUncertain = declaredTeamIds.length < 2 && declared.length >= 2;
+  /* ★ 편이 셋 이상이면 **팀이 없는 개인전**이다(요청: "밀리경기는 팀 없이 개인전이라고
+     표시하고 승리자 고르게") — 프리 포 올이 그렇다. 앞판은 이것도 '팀을 못 나눴다'로 몰아
+     사람에게 편을 가르라고 했는데, 그건 없는 편을 지어내라는 말이다. 난투에는 편이 없고,
+     사람이 알려 줄 것은 하나뿐이다: **누가 이겼나**.
+     그래서 team1 자리를 '이긴 사람', team2 자리를 '나머지 전원'으로 쓰고 유형은 개인전
+     (0101)으로 적는다. 두 자리를 쓰는 것은 저장 모형이 team1/team2뿐이기 때문이고, 그
+     안에서 이 배치가 사실을 한 톨도 안 왜곡한다 — 이긴 사람 하나와 진 사람 여럿. */
+  /* ★ **밀리에는 편이 없다** — 사람 구조의 Team 칸이 뭐라 적혀 있든(지적: 2010년 이전
+     리플레이의 팀이 안 갈린다) ────────────────────────────────────────────────────
+     위 셈은 편을 오로지 Team 칸의 가짓수로 가린다. 그런데 그 칸은 **로비의 자리 묶음**
+     이고, 밀리에서는 게임이 그것을 안 본다 — 밀리는 전원이 서로 적이다.
+     실측(temp/1.16_long의 2010-12 리플레이 다섯):
+       · 8인 밀리 셋 — Team이 1,1,2,2,3,3,4,4다. 자리 짝일 뿐 동맹이 아니다.
+         가짓수가 넷이라 위 셈이 우연히 난투로 맞혔다.
+       · 8인 밀리 하나 — Team이 **전원 0**이다. 가짓수가 하나라 난투로 못 보고
+         '편을 못 나눴다'로 떨어져, 사람에게 **없는 편을 지어내라**고 물었다.
+       · 4인 Top vs Bottom 하나 — Team 1,1,2,2. 여긴 진짜 편이다.
+     같은 밀리인데 Team 칸이 어떻게 적혔느냐로 답이 갈리는 것이 잘못이다. 편이 있는지는
+     유형이 말한다: 밀리·프리 포 올이면 편이 없고, 사람 수가 셋 이상이면 그것이 난투다
+     (둘이면 그냥 1:1이라 여태 길 그대로 간다).
+     ⚠ 밀리 방에서 채팅으로 동맹을 맺고 2:2를 한 판은 이 자에서도 난투로 잡힌다 —
+       리플레이 어디에도 그 동맹이 안 적히므로 가릴 재료가 없다. 그 판은 사람이 수기로
+       고쳐야 한다. 대신 '편을 지어내라'는 물음은 사라진다. */
+  const typeName9 = res.Header.Type?.Name ?? "";
+  const noTeamType9 = typeName9 === "Melee" || typeName9 === "Free For All";
+  /** 팀 칸이 **아무 말도 안 하는** 판 — 전원이 같은 번호다. */
+  const noTeamInfo9 = declaredTeamIds.length < 2;
+  const ffa = playingTeamIds.length > 2
+    || (noTeamType9 && noTeamInfo9 && onPlayingTeam.length > 2);
+  const teamSplitUncertain = !ffa && declaredTeamIds.length < 2 && declared.length >= 2;
 
   // (2) 그러고도 실제 팀 슬롯에 앉은 관전자가 의심되면 조작량으로 짚어낸다 — 이건 확정
   // 근거가 아니라 추정이라, 예전엔 로스터에서 아예 빼고 이름만 텍스트로 알렸는데, 초반에
@@ -1357,15 +1401,12 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
   const guessedObserverSet = new Set(guessedObservers);
 
   const [firstTeam] = playingTeamIds;
-  const team1 = players.filter((p) => p.team === firstTeam);
-  const team2 = players.filter((p) => p.team !== firstTeam);
 
   // 경기 유형(1:1 vs 팀전)은 의심스러운 사람을 뺀 "확실한 참가자" 수만으로 판단한다 —
   // 안 그러면 1:1 경기에 의심스러운 관전자 한 명이 팀 슬롯에 앉아있었다는 이유만으로
   // 다시 "팀전"으로 잘못 분류된다(이 로직 전체가 원래 막으려던 문제).
-  const confirmedTeam1 = team1.filter((p) => !guessedObserverSet.has(p.rawName));
-  const confirmedTeam2 = team2.filter((p) => !guessedObserverSet.has(p.rawName));
-  const matchType: GameType = confirmedTeam1.length === 1 && confirmedTeam2.length === 1 ? "0101" : "0102";
+  /* 편 나누기는 승자 판정 뒤로 미룬다 — 프리 포 올에서는 team1 자리가 곧 '이긴 사람'이라
+     승자를 알아야 편을 짤 수 있다(아래 winnerTeamRaw 다음). */
 
   /* screp이 승패를 못 가렸을 때(WinnerTeam=0)의 마지막 근거 — 나간 기록(Leave Game)이다.
      screp의 판정은 "끝까지 남은 편"을 보는데, 이긴 편에서도 한 명이 (대개 마지막 프레임에)
@@ -1380,9 +1421,13 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
      '전원 나감'이 안 된다. 양쪽 다 전원 나갔거나 양쪽 다 남아 있으면 손대지 않는다:
      그건 정말 못 가리는 판이라 사람이 검토 화면에서 직접 골라야 한다(아래 winnerSide=null).
      screp이 이미 가린 판은 절대 건드리지 않는다 — 이건 빈자리를 채우는 값이다. */
+  /* ★ **밀리(프리 포 올)에도 같은 자를 댄다**(요청: "원래는 밀리도 마지막 남은 사람이
+     승리자라 그걸 기본으로 적용해줘") — 앞판은 편 둘을 꺼내 서로 견주는 식이라 편이
+     셋 이상이면 첫 줄에서 되돌아갔다. 그런데 규칙 자체는 편 수와 무관하다: **끝까지
+     안 나간 편이 하나뿐이면 그 편이 이긴 편**이다. 둘 이상 남았거나(중도 종료) 전원이
+     나갔으면 못 가린 것이고, 그때만 사람에게 묻는다. */
   const leaveWinnerTeam = ((): number | null => {
-    const [t1Id, t2Id] = playingTeamIds;
-    if (t1Id === undefined || t2Id === undefined) return null;
+    if (playingTeamIds.length < 2) return null;
     const leftIds = new Set(
       (res.Computed?.LeaveGameCmds ?? []).map((c) => c.PlayerID),
     );
@@ -1395,15 +1440,118 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
       const ids = played.filter((p) => p.Team === team).map((p) => p.ID);
       return ids.length > 0 && ids.every((id) => leftIds.has(id));
     };
-    const out1 = allLeft(t1Id);
-    const out2 = allLeft(t2Id);
-    if (out1 === out2) return null;
-    return out1 ? t2Id : t1Id;
+    const remain9 = playingTeamIds.filter((tid) => !allLeft(tid));
+    if (remain9.length === 1) return remain9[0];
+    /* ★ **전원이 나갔으면 마지막에 나간 사람이 이긴 사람**이다(지적: "새로 등록했는데
+       승리자도 자동으로 안 잡혔어") ────────────────────────────────────────────────
+       위 규칙(안 나간 편이 하나뿐)은 이긴 쪽이 리플레이 끝까지 남아 있을 때만 걸린다.
+       그런데 밀리에서는 마지막 한 사람도 대개 **제 손으로 나가며** 판을 끝낸다 — 그러면
+       모든 편이 '전원 나감'이라 규칙이 비어 버린다. 실측한 그 판이 그 모양이었다.
+       나간 **차례**를 보면 답이 남아 있다: 밀리에서 사람은 죽는 순서대로 나가므로,
+       가장 늦게 나간 사람이 곧 마지막까지 남았던 사람이다. 그 사람의 편을 이긴 편으로
+       친다. 같은 프레임에 둘 이상이 나갔으면(동시 종료) 가리지 않는다 — 그건 정말
+       모르는 판이고, 그때만 사람에게 묻는다. */
+    if (remain9.length === 0) {
+      const teamOfId9 = new Map(played.map((p) => [p.ID, p.Team]));
+      let lastF9 = -1;
+      let lastTeams9: number[] = [];
+      for (const c9 of res.Computed?.LeaveGameCmds ?? []) {
+        const tm9 = teamOfId9.get(c9.PlayerID);
+        if (tm9 === undefined || !playingTeamIds.includes(tm9)) continue;
+        const f9 = c9.Frame ?? 0;
+        if (f9 > lastF9) { lastF9 = f9; lastTeams9 = [tm9]; }
+        else if (f9 === lastF9 && !lastTeams9.includes(tm9)) lastTeams9.push(tm9);
+      }
+      if (lastTeams9.length === 1) return lastTeams9[0];
+    }
+    return null;
   })();
   const screpWinner = res.Computed?.WinnerTeam ?? 0;
   const winnerTeamRaw = screpWinner !== 0 ? screpWinner : leaveWinnerTeam ?? 0;
-  const winnerSide: "team1" | "team2" | null =
-    winnerTeamRaw === 0 ? null : winnerTeamRaw === firstTeam ? "team1" : "team2";
+  /* ★ 난투의 승자는 **편이 아니라 사람 하나**다(실측: 8인 밀리에서 team1에 둘이 앉았다)
+     ────────────────────────────────────────────────────────────────────────────────
+     위 승자 판정은 전부 '편' 단위다. 편이 진짜인 판에서는 옳지만, 밀리의 Team 칸은
+     자리 짝일 뿐이라(위 ffa 주석) 그 편을 그대로 team1에 앉히면 **이긴 사람이 둘**이
+     된다. 난투에 공동 우승은 없다.
+     그래서 난투에서는 같은 증거(나감 기록)를 **사람 단위로** 다시 읽는다 — 규칙은 그대로다:
+     끝까지 안 나간 사람이 하나면 그 사람, 전원 나갔으면 가장 늦게 나간 사람. 둘 이상이
+     걸리면 안 가린다(사람이 검토 화면에서 고른다) — 없는 답을 지어내지 않는다. */
+  const ffaWinnerName = ((): string | null => {
+    /* 사람 단위로 좁히는 것은 **팀 칸이 빈 판뿐**이다(실측이 시킨 제한이다) ────────────
+       팀 칸이 1,1,2,2,3,3,4,4로 적힌 8인 판 셋을 열어 보니, 이긴 짝의 **두 사람이 모두
+       끝까지 안 나갔다**. 진짜 난투라면 마지막에 한 사람만 남는다 — 둘이 나란히 살아
+       남았다는 것은 그 둘이 실제로 **동맹이었다**는 뜻이다(밀리 방에서 맺은 2:2:2:2).
+       그런 판에서 억지로 하나를 고르면 이긴 짝의 한쪽을 지운다. 그때는 편이 곧 답이니
+       종전대로 편을 그대로 앉힌다.
+       전원이 같은 번호인 판(실측: 8인 밀리 하나)에만 사람 단위가 필요하다 — 거기서
+       편을 그대로 앉히면 여덟 명이 통째로 이긴 사람이 된다. */
+    if (!ffa || !noTeamInfo9) return null;
+    const leftAt9 = new Map<number, number>();
+    for (const c9 of res.Computed?.LeaveGameCmds ?? []) {
+      const f9 = c9.Frame ?? 0;
+      const prev9 = leftAt9.get(c9.PlayerID);
+      if (prev9 === undefined || f9 > prev9) leftAt9.set(c9.PlayerID, f9);
+    }
+    /* 실제로 친 사람만 본다 — 관전자는 나갈 일이 없어 '끝까지 안 나간 사람'에 섞이면
+       그 사람이 우승자가 된다. 컴퓨터는 명령이 안 잡히는 판이 있어 따로 통과시킨다. */
+    const played9 = (res.Header.Players ?? []).filter((p9) => (
+      !p9.Observer && p9.Type?.Name !== "Observer"
+      && (p9.Type?.Name === "Computer" || (descByPlayerId.get(p9.ID)?.CmdCount ?? 0) > 0)
+    ));
+    /** 이 후보들 중 마지막까지 남은 하나 — 못 가리면 null. */
+    const soleSurvivor9 = (cand9: typeof played9): string | null => {
+      if (cand9.length === 0) return null;
+      if (cand9.length === 1) return cand9[0].Name;
+      const stayed9 = cand9.filter((p9) => !leftAt9.has(p9.ID));
+      if (stayed9.length === 1) return stayed9[0].Name;
+      if (stayed9.length > 0) return null;   // 둘 이상이 안 나갔다 — 못 가린다
+      let lastF9 = -1;
+      let last9: string[] = [];
+      for (const p9 of cand9) {
+        const f9 = leftAt9.get(p9.ID) ?? -1;
+        if (f9 > lastF9) { lastF9 = f9; last9 = [p9.Name]; }
+        else if (f9 === lastF9) last9.push(p9.Name);
+      }
+      return last9.length === 1 ? last9[0] : null;
+    };
+    /* ★ **이긴 편을 먼저 좁힌다** — 그 편 안에서 사람을 고른다(실측이 시킨 순서다).
+       판 전체를 한 번에 훑으면 못 가리는 판이 많다: 공개 방에서는 끝까지 Leave Game을
+       안 보내는 사람이 흔해(밀리면 나가기 대신 창을 닫는다) '안 나간 사람'이 여럿이
+       된다. 실측한 8인 판에서 안 나간 사람이 둘·셋이었다.
+       그런데 screp은 그 판에서도 이긴 **편**은 가려 준다(WinnerTeam=4). 그 편은 밀리의
+       자리 짝이라 둘이지만, 둘 중 하나는 한참 전에 나갔다 — 편을 먼저 받고 그 안에서
+       고르면 답이 하나로 떨어진다. 편을 못 받은 판(WinnerTeam=0)에서만 판 전체를 훑고,
+       거기서도 안 갈리면 사람에게 묻는다. */
+    if (winnerTeamRaw !== 0) {
+      return soleSurvivor9(played9.filter((p9) => p9.Team === winnerTeamRaw));
+    }
+    return soleSurvivor9(played9);
+  })();
+  /* (지난 판의 주석 삭제) "프리 포 올은 승자도 사람이 고른다"는 더는 참이 아니다 —
+     밀리도 마지막 남은 사람이 이긴 사람이고(요청), 위 leaveWinnerTeam이 그것을 가린다.
+     사람에게 묻는 것은 **정말 못 가린 판**뿐이다(둘 이상 남음·전원 나감). */
+  /* 프리 포 올 — team1 자리에 이긴 사람, team2 자리에 나머지 전원. 승자를 못 가린
+     리플레이(winnerTeamRaw 0)면 team1을 비워 두고 사람이 칩을 옮겨 채운다. */
+  const team1 = ffa
+    ? (noTeamInfo9
+      ? (ffaWinnerName !== null ? players.filter((p) => p.rawName === ffaWinnerName) : [])
+      : (winnerTeamRaw !== 0 ? players.filter((p) => p.team === winnerTeamRaw) : []))
+    : players.filter((p) => p.team === firstTeam);
+  const team2 = ffa
+    ? players.filter((p) => !team1.includes(p))
+    : players.filter((p) => p.team !== firstTeam);
+  const confirmedTeam1 = team1.filter((p) => !guessedObserverSet.has(p.rawName));
+  const confirmedTeam2 = team2.filter((p) => !guessedObserverSet.has(p.rawName));
+  /* 난투는 **제 코드**를 쓴다(요청: "GameType에 FFA 값을 하나 더하는 쪽으로") — 한동안
+     개인전(0101)에 얹어 두었는데, 그러면 저장값만으로는 1:1과 안 갈려 래더가 난투까지
+     세었다(요청: "래더 집계 시 ffa는 제외 단순 일대일만"). 성질은 constants/gameTypes.ts의
+     표가 지고, 여기서는 코드만 고른다. */
+  const matchType: GameType = ffa ? "0103"
+    : (confirmedTeam1.length === 1 && confirmedTeam2.length === 1) ? "0101" : "0102";
+  const winnerSide: "team1" | "team2" | null = ffa
+    ? (team1.length > 0 ? "team1" : null)
+    : winnerTeamRaw === 0 ? null
+      : winnerTeamRaw === firstTeam ? "team1" : "team2";
 
   const startTime = new Date(res.Header.StartTime);
   const validStart = !Number.isNaN(startTime.getTime());
@@ -1417,12 +1565,14 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
 
   /* (걷어냄) 개체 트랙 v2 — 커맨드 스트림을 태그 단위로 다시 읽어 "이 번호가 무슨
      유닛이고 어디 있나"를 유추하던 자리다. 이제 서버가 리플레이를 **실제로 돌려** 참값을
-     구우므로(tools/openbw/README.md) 유추할 것이 없다. 등록 때 77ms를 쓰고 200만 자를
+     구우므로(덤퍼는 stargayte-api, 그 참값을 푸는 해독기는 scplay) 유추할 것이 없다. 등록 때 77ms를 쓰고 200만 자를
      올리던 짐이 통째로 사라졌다. */
   return {
     fileName: file.name,
     date,
     mapName: res.Header.Map ?? "",
+    gameTypeId: typeof res.Header.Type?.ID === "number" ? res.Header.Type.ID : null,
+    gameTypeName: res.Header.Type?.Name ?? "",
     gameStartedAt,
     durationSeconds,
     players,
@@ -1432,6 +1582,7 @@ export async function parseReplayFile(file: File): Promise<ParsedReplay> {
     winnerSide,
     guessedObservers,
     teamSplitUncertain,
+    ffa,
     mapGrid: await readMapGrid(res),
     startSpots: (res.MapData?.StartLocations ?? []).map((sp) => [sp.X / 32, sp.Y / 32] as [number, number]),
   };

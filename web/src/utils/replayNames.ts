@@ -1,12 +1,19 @@
 // 유닛·기술·건물의 한국어 통용 표기 — 원래 요약 문장 렌더러(replaySummaryText.ts)에
 // 살던 사전인데, 요약(문장·beats) 기능이 통째로 걷히면서 사전만 여기로 옮겨 왔다.
-// 통계(MemberStatRow)·생산 구성(replayBuildMix)·연속 재생(ReplayMotionPlayer)이 쓴다.
+// 통계(MemberStatRow)·생산 구성(statsMix)·연속 재생(ReplayMotionPlayer)이 쓴다.
 
 // screp 영문명 → 한국어 통용 표기. 여기 없는 유닛은 화면에 쓰지 않는다 — 영문명을 그대로
 // 노출하면 어색하고, UMS 맵의 영웅 유닛까지 새어 나온다.
 export const UNIT_KO: Record<string, string> = {
   // 라바·알(요청: 인포 팝업) — 개체 기록에는 안 남지만 화면에는 그려진다.
   Larva: "라바", Egg: "변태알",
+  /* 일꾼·오버로드와 부속 개체(지적: "인포팝업 유닛명 … 한글 음독으로") — 이 표에
+     없으면 팝업이 영문명을 그대로 내보인다. 지도에서 가장 많이 눌리는 것이 일꾼인데
+     바로 그 넷이 빠져 있었다. 알·고치 껍질도 화면에 그려지므로 함께 적는다. */
+  SCV: "SCV", Probe: "프로브", Drone: "드론", Overlord: "오버로드",
+  "Lurker Egg": "럴커 알", "Mutalisk Cocoon": "뮤탈 고치",
+  Broodling: "브루들링", Interceptor: "인터셉터", Scarab: "스캐럽",
+  "Spider Mine": "스파이더 마인",
   Marine: "마린", Firebat: "파이어뱃", Medic: "메딕", Ghost: "고스트",
   Vulture: "벌처", Goliath: "골리앗",
   "Siege Tank (Tank Mode)": "탱크", "Siege Tank (Siege Mode)": "탱크",
@@ -34,6 +41,9 @@ export const TECH_KO: Record<string, string> = {
   "Yamato Gun": "야마토", "Cloaking Field": "레이스 클로킹",
   "Personnel Cloaking": "고스트 클로킹", Restoration: "리스토레이션",
   "Optical Flare": "옵티컬 플레어",
+  /* 여태 빠져 있던 셋(리콜과 같은 사정) — 덤퍼가 제 명령으로 도는 마법을 안 적어
+     검색에 나올 일이 없으니 사전에도 안 넣혀 있었다. 이제 적히므로 이름도 있어야 한다. */
+  "Scanner Sweep": "스캔", "Defensive Matrix": "매트릭스", Feedback: "피드백",
   // 저그
   Burrowing: "버로우", "Lurker Aspect": "럴커", Plague: "플레이그", Consume: "컨슘",
   Ensnare: "인스네어", "Spawn Broodlings": "브루들링", "Dark Swarm": "다크스웜",

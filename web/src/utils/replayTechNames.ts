@@ -1,3 +1,5 @@
+import { TECH_KO } from "./replayNames";
+
 // 리플레이의 기술(Tech)·업그레이드(Upgrade) 이름 — screp이 내려주는 영문 키를 한 곳에 모은다.
 //
 // 왜 따로 두나: 이 이름들을 코드 곳곳에서 문자열 리터럴로 적어 쓰다가 조용히 안 맞는 사고가
@@ -136,6 +138,52 @@ export const SIGNATURE_UPGRADE_KO: Partial<Record<UpgradeName, string>> = {
   "Colossus Reactor": "배틀크루저 에너지업",
   Antennae: "오버로드 시야업",
 };
+
+/* ── 연구 이름의 한국어(요청: "인포팝업 유닛명 기술명은 한글 음독으로") ─────────────
+   인포 팝업은 여태 `TECH_KO[n] ?? n`으로 이름을 냈다. TECH_KO는 **기술(Tech)** 표라
+   업그레이드는 한 줄도 없어, '연구 중'·'연구 완료'가 죄다 영문으로 나왔다
+   ("Metabolic Boost", "Terran Infantry Weapons" …). 업그레이드 쉰 개의 표를 세운다. */
+export const UPGRADE_KO: Record<UpgradeName, string> = {
+  // 공/방 — 팝업은 아래 '공방실속사' 줄이 단계까지 따로 말하고, 이 이름은 건물 쪽
+  // '연구 중' 줄이 쓴다.
+  "Terran Infantry Armor": "보병 방어", "Terran Vehicle Plating": "메카닉 방어",
+  "Terran Ship Plating": "공중 방어", "Zerg Carapace": "지상 방어",
+  "Zerg Flyer Carapace": "공중 방어", "Protoss Ground Armor": "지상 방어",
+  "Protoss Air Armor": "공중 방어", "Protoss Plasma Shields": "실드",
+  "Terran Infantry Weapons": "보병 공격", "Terran Vehicle Weapons": "메카닉 공격",
+  "Terran Ship Weapons": "공중 공격", "Zerg Melee Attacks": "저글링 공격",
+  "Zerg Missile Attacks": "히드라 공격", "Zerg Flyer Attacks": "공중 공격",
+  "Protoss Ground Weapons": "지상 공격", "Protoss Air Weapons": "공중 공격",
+  // 한 번뿐인 것들 — 부르는 말 그대로다(속업·사업·에너지업…).
+  "U-238 Shells": "마린 사업", "Ion Thrusters": "벌처 속업",
+  "Titan Reactor": "베슬 에너지업", "Ocular Implants": "고스트 시야업",
+  "Moebius Reactor": "고스트 에너지업", "Apollo Reactor": "레이스 에너지업",
+  "Colossus Reactor": "배틀크루저 에너지업", "Ventral Sacs": "오버로드 수송",
+  Antennae: "오버로드 시야업", "Pneumatized Carapace": "오버로드 속업",
+  "Metabolic Boost": "저글링 속업", "Adrenal Glands": "저글링 아드레날린",
+  "Muscular Augments": "히드라 속업", "Grooved Spines": "히드라 사업",
+  "Gamete Meiosis": "퀸 에너지업", "Defiler Energy": "디파일러 에너지업",
+  "Singularity Charge": "드라군 사업", "Leg Enhancement": "질럿 속업",
+  "Scarab Damage": "스캐럽 공업", "Reaver Capacity": "리버 스캐럽 증설",
+  "Gravitic Drive": "셔틀 속업", "Sensor Array": "옵저버 시야업",
+  "Gravitic Booster": "옵저버 속업", "Khaydarin Amulet": "템플러 에너지업",
+  "Apial Sensors": "스카웃 시야업", "Gravitic Thrusters": "스카웃 속업",
+  "Carrier Capacity": "캐리어 인터셉터 증설", "Khaydarin Core": "아비터 에너지업",
+  "Argus Jewel": "커세어 에너지업", "Argus Talisman": "다크아콘 에너지업",
+  "Caduceus Reactor": "메딕 에너지업", "Chitinous Plating": "울트라 방업",
+  "Anabolic Synthesis": "울트라 속업", "Charon Boosters": "골리앗 사업",
+};
+
+/** 연구(기술·업그레이드) 이름 → 화면 말. 어느 갈래인지 모르는 자리에서 이것만 부르면 된다. */
+export function researchKo(name: string): string {
+  return TECH_KO[name] ?? UPGRADE_KO[name as UpgradeName] ?? name;
+}
+
+/** 그 유닛의 팝업에서 쓸 짧은 딱지(요청: "공방실드속업사업은 이름 말고 이해하기 쉽게
+ *  공방실속사로") — 어느 유닛의 것인지는 팝업 제목이 이미 말하므로, 유닛 이름을 뗀
+ *  '속업·사업'만 남기고 그중 속·사는 한 글자로 접는다. 나머지(에너지업·시야업 등)는
+ *  글자로 접으면 무엇인지 알 수 없어 말 그대로 둔다. */
+export const UPGRADE_ONE_LETTER: Record<string, string> = { 속업: "속", 사업: "사" };
 
 /** 그 업그레이드가 꾸미는 유닛과, 유닛 이름 앞에 붙일 딱지(요청: 업그레이드는 그 유닛이
  *  나올 때 같이 덧붙여도 된다).
