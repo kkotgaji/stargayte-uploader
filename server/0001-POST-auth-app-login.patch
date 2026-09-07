@@ -1,0 +1,220 @@
+From 4ce6e6f2783cc12976cfe87f3d37473f6745b9c5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 7 Sep 2026 03:03:50 +0000
+Subject: [PATCH] =?UTF-8?q?=EC=9D=B8=EC=A6=9D:=20=EC=9E=90=EB=8F=99=20?=
+ =?UTF-8?q?=EB=93=B1=EB=A1=9D=EA=B8=B0=EC=9A=A9=20=EC=9E=A5=EA=B8=B0=20?=
+ =?UTF-8?q?=ED=86=A0=ED=81=B0=20=EB=A1=9C=EA=B7=B8=EC=9D=B8=20POST=20/auth?=
+ =?UTF-8?q?/app-login?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+윈도우 자동 등록기(uploader)는 사람이 안 보는 채로 돌아 리프레시 회전을 이어갈 수 없다.
+아이디·비밀번호로 장기 액세스 토큰(app_token_expire_days, 기본 365일, claim kind=app) 하나를
+주고 그대로 Bearer로 쓴다. 회원 상태는 요청마다 다시 보므로 차단·탈퇴로 끊긴다.
+접속 기록은 login 코드에 detail "uploader <기기>"로 남긴다.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018rLczidMgboawvrHP6rbzx
+---
+ src/app/core/config.py         |  3 +++
+ src/app/core/security.py       |  8 +++++++
+ src/app/domain/auth/router.py  | 20 ++++++++++++++++
+ src/app/domain/auth/schemas.py | 16 +++++++++++++
+ src/app/domain/auth/service.py | 25 ++++++++++++++++++++
+ tests/test_app_login.py        | 42 ++++++++++++++++++++++++++++++++++
+ 6 files changed, 114 insertions(+)
+ create mode 100644 tests/test_app_login.py
+
+diff --git a/src/app/core/config.py b/src/app/core/config.py
+index 0b9ad2b..08481a5 100644
+--- a/src/app/core/config.py
++++ b/src/app/core/config.py
+@@ -39,6 +39,9 @@ class Settings(BaseSettings):
+     # 30일 넘게 안 쓰면 다시 로그인해야 한다.
+     jwt_access_token_expire_minutes: int = 60
+     refresh_token_expire_days: int = 30
++    # 앱(자동 등록기)용 장기 토큰 — 리프레시 없이 그대로 Bearer로 쓴다.
++    # 회원 상태는 요청마다 다시 본다(ensure_member_usable).
++    app_token_expire_days: int = 365
+ 
+     cors_allow_origins: Annotated[list[str], NoDecode] = Field(
+         default_factory=lambda: ["http://localhost:5173"]
+diff --git a/src/app/core/security.py b/src/app/core/security.py
+index d57a61e..fb6560f 100644
+--- a/src/app/core/security.py
++++ b/src/app/core/security.py
+@@ -26,6 +26,14 @@ def create_access_token(subject: str) -> str:
+     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+ 
+ 
++def create_app_token(subject: str) -> tuple[str, datetime]:
++    """앱(자동 등록기)용 장기 액세스 토큰 — 만료가 길 뿐 decode_access_token이 그대로 읽는다.
++    `kind: app`을 실어 두어 접속 기록·차단에 갈래를 남길 수 있다."""
++    expires_at = datetime.now(UTC) + timedelta(days=settings.app_token_expire_days)
++    payload = {"sub": subject, "exp": expires_at, "kind": "app"}
++    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm), expires_at
++
++
+ def decode_access_token(token: str) -> str:
+     try:
+         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+diff --git a/src/app/domain/auth/router.py b/src/app/domain/auth/router.py
+index cbfb43a..a17527d 100644
+--- a/src/app/domain/auth/router.py
++++ b/src/app/domain/auth/router.py
+@@ -3,6 +3,8 @@ from fastapi import APIRouter, Request
+ from app.api.deps import CurrentMember, DbSession, StorageDep
+ from app.domain.auth.schemas import (
+     AccessPingRequest,
++    AppLoginRequest,
++    AppTokenResponse,
+     AuthResponse,
+     LoginRequest,
+     LogoutRequest,
+@@ -27,6 +29,24 @@ async def login(payload: LoginRequest, request: Request, db: DbSession, storage:
+     return AuthResponse(access_token=access_token, refresh_token=refresh_token, user=MemberOut.model_validate(member))
+ 
+ 
++@router.post("/app-login", response_model=AppTokenResponse)
++async def app_login(
++    payload: AppLoginRequest, request: Request, db: DbSession, storage: StorageDep
++) -> AppTokenResponse:
++    """자동 등록기(윈도우 앱)용 — 아이디·비밀번호로 장기 토큰(기본 365일) 하나를 준다."""
++    member, token, expires_at = await AuthService(db, storage).app_login(
++        payload.id,
++        payload.password,
++        device=payload.device,
++        ip_address=request.client.host if request.client else None,
++        user_agent=request.headers.get("user-agent"),
++        client_env=request.headers.get("x-client-env") or "uploader",
++    )
++    return AppTokenResponse(
++        app_token=token, expires_at=expires_at, user=MemberOut.model_validate(member)
++    )
++
++
+ @router.post("/signup", response_model=AuthResponse)
+ async def signup(payload: SignupRequest, db: DbSession, storage: StorageDep) -> AuthResponse:
+     member, access_token, refresh_token = await AuthService(db, storage).signup(payload)
+diff --git a/src/app/domain/auth/schemas.py b/src/app/domain/auth/schemas.py
+index de0c247..bcb2c08 100644
+--- a/src/app/domain/auth/schemas.py
++++ b/src/app/domain/auth/schemas.py
+@@ -49,6 +49,22 @@ class LoginRequest(BaseModel):
+     password: str
+ 
+ 
++class AppLoginRequest(BaseModel):
++    """자동 등록기(윈도우 앱) 로그인 — 아이디·비밀번호로 장기 토큰 하나를 받는다."""
++
++    id: str
++    password: str
++    device: str = Field(default="", max_length=120)
++
++
++class AppTokenResponse(BaseModel):
++    model_config = ConfigDict(populate_by_name=True)
++
++    app_token: str = Field(alias="appToken")
++    expires_at: datetime = Field(alias="expiresAt")
++    user: MemberOut
++
++
+ class SignupRequest(BaseModel):
+     model_config = ConfigDict(populate_by_name=True)
+ 
+diff --git a/src/app/domain/auth/service.py b/src/app/domain/auth/service.py
+index 8e6659e..22d7fb9 100644
+--- a/src/app/domain/auth/service.py
++++ b/src/app/domain/auth/service.py
+@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ from app.core.exceptions import UnauthorizedError
+ from app.core.security import (
+     create_access_token,
++    create_app_token,
+     generate_refresh_token,
+     hash_refresh_token,
+     refresh_token_expiry,
+@@ -47,6 +48,30 @@ class AuthService:
+         refresh_token = await self._issue_refresh_token(member)
+         return member, create_access_token(str(member.pk)), refresh_token
+ 
++    async def app_login(
++        self,
++        member_id: str,
++        password: str,
++        *,
++        device: str = "",
++        ip_address: str | None = None,
++        user_agent: str | None = None,
++        client_env: str | None = None,
++    ) -> tuple[Member, str, datetime]:
++        """자동 등록기(윈도우 앱) 로그인 — 리프레시 토큰 대신 장기 액세스 토큰 하나를 준다.
++        앱은 사람이 안 보는 채로 돌아 리프레시 회전을 이어갈 수 없고, 토큰이 새도 회원
++        상태(ensure_member_usable)는 요청마다 다시 보므로 차단·탈퇴로 끊을 수 있다."""
++        member = await self._repo.get_by_login_id(member_id)
++        if member is None or not verify_password(password, member.password_hash):
++            raise UnauthorizedError("아이디 또는 비밀번호가 올바르지 않습니다.")
++        ensure_member_usable(member)
++        await self.record_access(
++            member, ip_address=ip_address, user_agent=user_agent, screen_code="login",
++            detail=f"uploader {device}".strip()[:64], client_env=client_env,
++        )
++        token, expires_at = create_app_token(str(member.pk))
++        return member, token, expires_at
++
+     async def _issue_refresh_token(self, member: Member) -> str:
+         raw = generate_refresh_token()
+         self._session.add(
+diff --git a/tests/test_app_login.py b/tests/test_app_login.py
+new file mode 100644
+index 0000000..5cc1c7a
+--- /dev/null
++++ b/tests/test_app_login.py
+@@ -0,0 +1,42 @@
++"""앱(자동 등록기) 로그인 — 아이디·비밀번호로 장기 토큰 하나를 받고, 그 토큰이 그대로
++Bearer로 통해야 한다(리프레시 없음). 만료는 설정(app_token_expire_days)만큼 길다."""
++
++from datetime import UTC, datetime, timedelta
++
++from app.core.config import settings
++from app.core.security import decode_access_token
++
++
++async def _signup(client, member_id: str, battletag: str) -> dict:
++    res = await client.post(
++        "/api/auth/signup",
++        json={"id": member_id, "password": "pass1234", "battletag": battletag,
++              "replayAliases": [member_id], "insta": ""},
++    )
++    assert res.status_code == 200, res.text
++    return res.json()
++
++
++async def test_app_login_issues_long_lived_bearer(client):
++    a = await _signup(client, "alice", "Alice#1001")
++    res = await client.post(
++        "/api/auth/app-login", json={"id": "alice", "password": "pass1234", "device": "PC-1"}
++    )
++    assert res.status_code == 200, res.text
++    body = res.json()
++    assert body["user"]["id"] == a["user"]["id"]
++    assert "refreshToken" not in body
++    assert decode_access_token(body["appToken"]).isdigit()  # sub = 회원 pk
++    expires = datetime.fromisoformat(body["expiresAt"].replace("Z", "+00:00"))
++    days = (expires - datetime.now(UTC)) / timedelta(days=1)
++    assert settings.app_token_expire_days - 1 < days <= settings.app_token_expire_days
++
++    me = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {body['appToken']}"})
++    assert me.status_code == 200, me.text
++    assert me.json()["id"] == a["user"]["id"]
++
++
++async def test_app_login_rejects_wrong_password(client):
++    await _signup(client, "alice", "Alice#1001")
++    res = await client.post("/api/auth/app-login", json={"id": "alice", "password": "nope"})
++    assert res.status_code == 401
+-- 
+2.43.0
+
