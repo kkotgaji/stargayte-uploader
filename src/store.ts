@@ -1,14 +1,8 @@
-// 로컬 상태 — 로그인 토큰(OS 자격 저장소로 암호화)과 처리 장부(어느 파일을 어떻게 했나).
+// 로컬 상태 — 처리 장부(어느 파일을 어떻게 했나). 로그인 세션은 여기 없다: 사이트 창의
+// localStorage(persist 파티션)가 사이트와 같은 방식으로 갖는다(page.ts 머리말).
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { INITIAL_SCAN_FROM } from "./config";
-
-export interface AuthState {
-  token: string;
-  expiresAt: string;
-  userId: string;
-  nickname: string;
-}
 
 export interface LedgerEntry {
   at: string;
@@ -27,19 +21,12 @@ export interface Ledger {
   firstRun?: boolean;
 }
 
-interface Crypto {
-  encrypt(plain: string): string;
-  decrypt(blob: string): string;
-}
-
 export class Store {
-  private authPath: string;
   private ledgerPath: string;
   ledger: Ledger;
 
-  constructor(private dir: string, private crypto: Crypto) {
+  constructor(private dir: string) {
     mkdirSync(dir, { recursive: true });
-    this.authPath = join(dir, "auth.json");
     this.ledgerPath = join(dir, "processed.json");
     this.ledger = this.readLedger();
   }
@@ -65,26 +52,6 @@ export class Store {
     const { firstRun: _firstRun, ...persisted } = this.ledger;
     writeFileSync(tmp, JSON.stringify(persisted, null, 1));
     renameSync(tmp, this.ledgerPath);
-  }
-
-  readAuth(): AuthState | null {
-    try {
-      if (!existsSync(this.authPath)) return null;
-      const raw = JSON.parse(readFileSync(this.authPath, "utf8")) as Partial<AuthState> & { enc?: string };
-      if (!raw.enc || !raw.userId) return null;
-      return { token: this.crypto.decrypt(raw.enc), expiresAt: raw.expiresAt ?? "", userId: raw.userId, nickname: raw.nickname ?? "" };
-    } catch {
-      return null;
-    }
-  }
-
-  writeAuth(a: AuthState | null): void {
-    if (!a) {
-      try { writeFileSync(this.authPath, "{}"); } catch { /* 없어도 그만 */ }
-      return;
-    }
-    const out = { enc: this.crypto.encrypt(a.token), expiresAt: a.expiresAt, userId: a.userId, nickname: a.nickname };
-    writeFileSync(this.authPath, JSON.stringify(out));
   }
 
   get dataDir(): string { return this.dir; }

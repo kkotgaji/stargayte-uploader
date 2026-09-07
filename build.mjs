@@ -1,11 +1,11 @@
-// 번들 — 메인(Node)과 preload를 esbuild로 한 파일씩 만든다. 리플레이 파서(screp-js)와
-// 홈페이지의 유틸(../src/utils/*)을 그대로 끌어와 묶는다. 서버 주소는 UPLOADER_API_BASE로.
+// 번들 — 메인(Node)과 preload를 esbuild로 한 파일씩 만든다. 사이트 주소는 UPLOADER_SITE_BASE로
+// (등록기는 그 사이트의 /uploader.html을 숨은 창으로 띄운다 — src/page.ts).
 import { build } from "esbuild";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
-const apiBase = process.env.UPLOADER_API_BASE ?? "http://localhost:8000";
-if (!process.env.UPLOADER_API_BASE) console.warn("[build] UPLOADER_API_BASE가 없어 http://localhost:8000 으로 박습니다.");
+const siteBase = process.env.UPLOADER_SITE_BASE ?? "http://localhost:5173";
+if (!process.env.UPLOADER_SITE_BASE) console.warn("[build] UPLOADER_SITE_BASE가 없어 http://localhost:5173 으로 박습니다.");
 
 const common = {
   bundle: true,
@@ -16,8 +16,7 @@ const common = {
   sourcemap: false,
   logLevel: "info",
   define: {
-    "import.meta.env": "{}",
-    __API_BASE__: JSON.stringify(apiBase),
+    __SITE_BASE__: JSON.stringify(siteBase),
     __VERSION__: JSON.stringify(pkg.version),
   },
 };

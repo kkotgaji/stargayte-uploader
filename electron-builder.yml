@@ -5,8 +5,6 @@ directories:
 files:
   - dist/main.cjs
   - dist/preload.cjs
-  - login.html
-  - login.js
   - toast.html
   - toast.js
   - package.json

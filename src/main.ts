@@ -1,17 +1,16 @@
 // 스타게이트 자동 등록기 — 트레이에 상주하며 스타크래프트 AutoSave 폴더의 새 리플레이를
-// 홈페이지에 등록한다. 설정 화면은 없다(config.ts의 고정 규칙). 로그인 창은 토큰이
-// 없거나 죽었을 때만 뜬다.
-import { app, BrowserWindow, ipcMain, Menu, Notification, Tray, nativeImage, safeStorage, shell } from "electron";
-import { hostname } from "node:os";
+// 홈페이지에 등록한다. 등록 절차는 제 것이 아니다: 사이트의 /uploader.html을 숨은 창으로
+// 띄워 파일을 넘기고 결과만 받는다(page.ts). 설정 화면은 없다. 로그인 창(그 페이지)은
+// 세션이 없거나 죽었을 때만 보인다.
+import { app, Menu, Notification, Tray, nativeImage, shell } from "electron";
 import { join } from "node:path";
-import { ApiError, HttpApi } from "./api";
-import { API_BASE, INITIAL_SCAN_FROM, REPLAY_SUBDIR, RETRY_MAX, RETRY_MS, VERSION } from "./config";
+import { readFile } from "node:fs/promises";
+import { INITIAL_SCAN_FROM, REPLAY_SUBDIR, RETRY_MAX, RETRY_MS, SITE_BASE, UPLOADER_PAGE, VERSION } from "./config";
 import { initLog, log } from "./log";
-import { processReplay } from "./pipeline";
-import { Store, type AuthState } from "./store";
+import { SitePage, type PageUser } from "./page";
+import { Store } from "./store";
 import { showToast, toastUploaded } from "./toast";
 import { ReplayWatcher } from "./watcher";
-import type { Member } from "../web/src/types";
 
 // 한 번에 하나만 — 두 번 켜면 먼저 켜진 쪽이 그대로 남는다.
 if (!app.requestSingleInstanceLock()) {
@@ -21,13 +20,10 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let tray: Tray | null = null;
-let loginWin: BrowserWindow | null = null;
 let store: Store;
-let api: HttpApi;
-let auth: AuthState | null = null;
+let page: SitePage;
+let user: PageUser | null = null;
 let watcher: ReplayWatcher | null = null;
-let members: Member[] = [];
-let membersAt = 0;
 let status = "준비 중";
 let recent: string[] = [];
 
@@ -38,32 +34,55 @@ async function boot(): Promise<void> {
   await app.whenReady();
   app.setAppUserModelId("com.stargayte.uploader");
   initLog(app.getPath("userData"));
-  log(`시작 v${VERSION} · 서버 ${API_BASE}`);
-
-  const crypto = safeStorage.isEncryptionAvailable()
-    ? { encrypt: (s: string) => safeStorage.encryptString(s).toString("base64"), decrypt: (b: string) => safeStorage.decryptString(Buffer.from(b, "base64")) }
-    // 암호화 저장소가 없는 환경(드묾) — 평문이지만 base64로만 감싼다.
-    : { encrypt: (s: string) => Buffer.from(s).toString("base64"), decrypt: (b: string) => Buffer.from(b, "base64").toString() };
-  store = new Store(app.getPath("userData"), crypto);
-  api = new HttpApi(API_BASE, () => auth?.token ?? null);
-  auth = store.readAuth();
+  log(`시작 v${VERSION} · 사이트 ${SITE_BASE}`);
+  store = new Store(app.getPath("userData"));
 
   // 윈도우 시작 때 함께 뜬다(설치본에서만 — 개발 실행은 등록하지 않는다).
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, args: ["--hidden"] });
 
   makeTray();
-  app.on("second-instance", () => { if (!auth) openLogin(); });
+  app.on("second-instance", () => { if (!user) page.show(); });
   app.on("window-all-closed", () => { /* 창이 다 닫혀도 트레이로 남는다 */ });
+  app.on("before-quit", () => { watcher?.stop(); page.destroy(); });
 
-  if (auth) startWatching();
-  else openLogin();
+  page = new SitePage(UPLOADER_PAGE, join(__dirname, "preload.cjs"), assetPath("icon.png"), {
+    onReady: (u) => {
+      user = u;
+      if (u) {
+        log(`사이트 창 준비 — ${u.nickname}(${u.id})`);
+        page.hide();
+        if (!watcher) startWatching();
+        else setStatus(watcher.watching ? "감시 중" : "리플레이 폴더가 아직 없어요(스타를 한 판 하면 생겨요)");
+      } else {
+        log("사이트 창 준비 — 로그인 필요");
+        setStatus("로그인 필요");
+        page.show();
+      }
+    },
+    onLoginOk: (u) => {
+      user = u;
+      log(`로그인: ${u.id}`);
+      setTimeout(() => page.hide(), 800);
+      if (!watcher) startWatching();
+      else setStatus(watcher.watching ? "감시 중" : "리플레이 폴더가 아직 없어요");
+    },
+    onNeedsLogin: (why) => {
+      log(`로그인 필요: ${why}`);
+      user = null;
+      setStatus("로그인 필요");
+      notify("다시 로그인해 주세요", why || "세션이 끝났어요.");
+      page.show();
+    },
+  });
+  setStatus("사이트에 연결 중");
+  page.open();
 }
 
 // ── 트레이 ──────────────────────────────────────────────────────────────────
 function makeTray(): void {
   const img = nativeImage.createFromPath(assetPath("icon.png")).resize({ width: 16, height: 16 });
   tray = new Tray(img);
-  tray.on("double-click", () => { if (!auth) openLogin(); });
+  tray.on("double-click", () => { if (!user) page.show(); });
   refreshTray();
 }
 
@@ -79,7 +98,7 @@ function noteRecent(line: string): void {
 
 function refreshTray(): void {
   if (!tray) return;
-  const who = auth ? `${auth.nickname || auth.userId}로 로그인됨` : "로그인 필요";
+  const who = user ? `${user.nickname || user.id}로 로그인됨` : "로그인 필요";
   tray.setToolTip(`스타게이트 등록기 — ${status}`);
   const menu = Menu.buildFromTemplate([
     { label: `스타게이트 등록기 v${VERSION}`, enabled: false },
@@ -92,52 +111,13 @@ function refreshTray(): void {
     { type: "separator" },
     { label: "지금 폴더 다시 검사", click: () => { void watcher?.rescan(); }, enabled: !!watcher },
     { label: "리플레이 폴더 열기", click: () => { void shell.openPath(replayDir()); } },
+    { label: "스타게이트 열기", click: () => { void shell.openExternal(SITE_BASE); } },
     { label: "로그 열기", click: () => { void shell.openPath(join(app.getPath("userData"), "uploader.log")); } },
     { type: "separator" },
-    { label: auth ? "다른 계정으로 로그인" : "로그인", click: () => openLogin() },
-    { label: "종료", click: () => { watcher?.stop(); app.quit(); } },
+    { label: user ? "다른 계정으로 로그인" : "로그인", click: () => { if (user) page.logout(); else page.show(); } },
+    { label: "종료", click: () => { app.quit(); } },
   ]);
   tray.setContextMenu(menu);
-}
-
-// ── 로그인 창 ───────────────────────────────────────────────────────────────
-function openLogin(): void {
-  if (loginWin) { loginWin.focus(); return; }
-  loginWin = new BrowserWindow({
-    width: 380, height: 420, resizable: false, minimizable: false, maximizable: false,
-    title: "스타게이트 등록기 로그인", autoHideMenuBar: true, icon: assetPath("icon.png"),
-    webPreferences: { preload: join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true },
-  });
-  loginWin.on("closed", () => { loginWin = null; });
-  void loginWin.loadFile(join(__dirname, "..", "login.html"));
-}
-
-ipcMain.handle("login", async (_e, id: string, password: string): Promise<{ ok: true; nickname: string } | { ok: false; error: string }> => {
-  try {
-    const res = await api.appLogin(id.trim(), password, hostname());
-    auth = { token: res.appToken, expiresAt: res.expiresAt, userId: res.user.id, nickname: res.user.nickname };
-    store.writeAuth(auth);
-    log(`로그인: ${auth.userId}`);
-    members = [];
-    membersAt = 0;
-    startWatching();
-    setTimeout(() => loginWin?.close(), 600);
-    return { ok: true, nickname: auth.nickname };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-});
-ipcMain.handle("info", () => ({ version: VERSION, apiBase: API_BASE, replayDir: replayDir(), user: auth?.nickname ?? null }));
-
-function dropAuth(why: string): void {
-  log(`로그인 필요: ${why}`);
-  auth = null;
-  store.writeAuth(null);
-  watcher?.stop();
-  watcher = null;
-  setStatus("로그인 필요");
-  notify("다시 로그인해 주세요", why);
-  openLogin();
 }
 
 // ── 감시·처리 ──────────────────────────────────────────────────────────────
@@ -169,21 +149,12 @@ function startWatching(): void {
   setStatus(watcher.watching ? "감시 중" : "리플레이 폴더가 아직 없어요(스타를 한 판 하면 생겨요)");
 }
 
-async function membersFresh(): Promise<Member[]> {
-  // 회원 목록은 10분마다만 새로 받는다 — 새 회원이 가입해도 그 안에 붙는다.
-  if (members.length === 0 || Date.now() - membersAt > 10 * 60_000) {
-    members = await api.getMembers();
-    membersAt = Date.now();
-  }
-  return members;
-}
-
 async function handleFile(path: string): Promise<void> {
   const name = path.split(/[\\/]/).pop() ?? path;
   setStatus(`처리 중: ${name}`);
   const prev = store.ledger.files[path];
   try {
-    const out = await processReplay(path, api, await membersFresh());
+    const out = await page.run(name, await readFile(path));
     const at = new Date().toISOString();
     if (out.kind === "registered") {
       store.ledger.files[path] = { at, status: "registered", matchNo: out.matchNo, note: out.summary };
@@ -202,7 +173,7 @@ async function handleFile(path: string): Promise<void> {
       noteRecent(`– 건너뜀 · ${out.reason}`);
     }
   } catch (e) {
-    if (e instanceof ApiError && e.needsLogin) { dropAuth(e.message); return; }
+    // 세션이 죽은 경우는 페이지가 needs-login으로 따로 알린다 — 여기선 실패로 적고 나중에 다시 한다.
     const tries = (prev?.tries ?? 0) + 1;
     const msg = e instanceof Error ? e.message : String(e);
     store.ledger.files[path] = { at: new Date().toISOString(), status: "failed", note: msg, tries };

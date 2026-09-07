@@ -1,11 +1,16 @@
 // 자동 등록기의 고정 설정 — 사용자가 바꿀 수 있는 화면은 없다(요청: 기본값으로 포함, 변경 불가).
-// 서버 주소만 빌드 때 UPLOADER_API_BASE 환경변수로 박는다(build.mjs의 define).
+// 사이트 주소만 빌드 때 UPLOADER_SITE_BASE 환경변수로 박는다(build.mjs의 define).
+//
+// ★ 등록 규칙(회원 2명·유즈맵·결과 모름·2분 미만…)은 여기 없다 — **사이트가 갖는다**
+//   (stargayte의 src/uploader/register.ts). 등록기는 사이트의 /uploader.html을 숨은 창으로
+//   띄워 파일을 넘길 뿐이라, 사이트가 배포되면 규칙도 그대로 따라온다(page.ts 머리말).
 
-declare const __API_BASE__: string;
+declare const __SITE_BASE__: string;
 declare const __VERSION__: string;
 
-/** 경기결과 서버(stargayte-api). 빌드 때 UPLOADER_API_BASE로 박히고, 없으면 로컬 서버다. */
-export const API_BASE: string = typeof __API_BASE__ === "string" ? __API_BASE__ : "http://localhost:8000";
+/** 스타게이트 홈페이지 — 숨은 창이 `${SITE_BASE}/uploader.html`을 띄운다. 빌드 때 박히고, 없으면 로컬 Vite다. */
+export const SITE_BASE: string = typeof __SITE_BASE__ === "string" ? __SITE_BASE__ : "http://localhost:5173";
+export const UPLOADER_PAGE = `${SITE_BASE.replace(/\/$/, "")}/uploader.html`;
 export const VERSION: string = typeof __VERSION__ === "string" ? __VERSION__ : "0.0.0";
 
 /** 스타크래프트 리마스터가 게임이 끝날 때마다 리플레이를 두는 자리 — 문서 폴더 아래.
@@ -24,28 +29,9 @@ export const RESCAN_MS = 60_000;
 export const RETRY_MS = 5 * 60_000;
 export const RETRY_MAX = 12;
 
-/** 등록 규칙 — 홈페이지의 검토 화면이 사람에게 묻던 것을 여기서는 고정값으로 정한다.
- *  · 승자를 못 가린 경기 → 결과 모름(unknown)으로 등록(홈페이지와 같다 — 래더에서 빠지고
- *    통계에선 전적·승률에만 안 센다. not_held는 '미실시'라 뜻이 다르다)
- *  · 회원과 안 이어지는 참가자 → 비회원 슬롯으로 등록
- *  · 이미 등록된 경기(게임 시작 시각 일치) → 리플레이 정보만 기존 경기에 머지(서버가 지금
- *    것보다 긴 저장본이면 파일도 갈아 끼우고 다시 굽는다)
- *  아래는 "조건 미달"로 건너뛰는 경우다(검토 화면이 사람 확인을 요구하거나 자동 제외하던 것). */
-export const RULES = {
-  /** 이보다 짧은 경기는 시작하자마자 나간 판일 가능성이 커 건너뛴다(사이트의 SHORT_MATCH_SEC). */
-  minDurationSec: 2 * 60,
-  /** 조작량이 적어 관전자로 "추정"해 뺀 사람이 있으면 — 초반에 나간 참가자를 잘못 지운 것일 수 있어 건너뛴다. */
-  skipIfGuessedObservers: true,
-  /** 컴퓨터(AI)가 낀 경기 — 사이트 검토 화면의 기본값(포함)을 따른다. */
-  skipIfComputer: false,
-  /** 로스터에 **회원이 이만큼은** 있어야 등록한다(요청: 양 팀 합쳐 2명 — 꼭 한 팀에 한 명씩일
-   *  필요는 없다. 혼자 비회원·컴퓨터하고만 한 판을 거르려는 것이다). 컴퓨터·비회원 슬롯은
-   *  안 세고, 같은 회원이 두 자리를 차지할 수는 없으니 서로 다른 회원의 수다. 홈페이지의
-   *  검토 화면이 같은 기준으로 자동 제외한다(replayDraft.ts의 memberSlotCount). */
-  minMembers: 2,
-} as const;
-
-/** 서버가 등록을 **거절하는** 리플레이 갈래 — 유즈맵(10) 하나다(서버 schemas.py의
- *  UMS_GAME_TYPE, 홈페이지 replayDraft.ts의 SERVER_REJECTS_GAME_TYPE과 같은 표). 이 표는
- *  서버 규칙의 사본이다 — 여기가 좁으면 서버가 400으로 잡고, 넓으면 등록만 안 된다. */
-export const REJECTED_GAME_TYPES: ReadonlySet<number> = new Set([10]);
+/** 사이트 창이 안 뜨면(네트워크 없음·사이트 죽음) 이 간격으로 다시 연다. */
+export const PAGE_RETRY_MS = 60_000;
+/** 파일 하나를 넘긴 뒤 이만큼 답이 없으면 실패로 친다(파싱 + 업로드 — 큰 리플레이도 1분이면 끝난다). */
+export const JOB_TIMEOUT_MS = 5 * 60_000;
+/** 처리할 파일이 생겼는데 사이트 창이 아직 준비 전이면 이만큼 기다린다. */
+export const PAGE_WAIT_MS = 2 * 60_000;
