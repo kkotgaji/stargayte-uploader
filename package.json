@@ -1,6 +1,6 @@
 {
   "name": "stargayte-uploader",
-  "productName": "스타게이트 등록기",
+  "productName": "Stargayte Uploader",
   "version": "1.0.0",
   "private": true,
   "description": "스타크래프트 AutoSave 리플레이를 스타게이트에 자동 등록하는 트레이 앱",

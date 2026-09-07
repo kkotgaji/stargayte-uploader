@@ -101,9 +101,9 @@ function noteRecent(line: string): void {
 function refreshTray(): void {
   if (!tray) return;
   const who = user ? `${user.nickname || user.id}로 로그인됨` : "로그인 필요";
-  tray.setToolTip(`스타게이트 등록기 — ${status}`);
+  tray.setToolTip(`Stargayte Uploader — ${status}`);
   const menu = Menu.buildFromTemplate([
-    { label: `스타게이트 등록기 v${VERSION}`, enabled: false },
+    { label: `Stargayte Uploader v${VERSION}`, enabled: false },
     { label: who, enabled: false },
     { label: `상태: ${status}`, enabled: false },
     { type: "separator" },
@@ -145,7 +145,7 @@ function startWatching(): void {
       if (n === 0) return;
       const from = INITIAL_SCAN_FROM.slice(0, 10);
       log(`첫 훑기: ${from} 이후 리플레이 ${n}건`);
-      notify("스타게이트 등록기", `${from} 이후 리플레이 ${n}건을 찾아 차례로 올려요. 끝나면 알려드릴게요.`);
+      notify("Stargayte Uploader", `${from} 이후 리플레이 ${n}건을 찾아 차례로 올려요. 끝나면 알려드릴게요.`);
     },
   });
   watcher.start();

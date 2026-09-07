@@ -1,4 +1,4 @@
-# 스타게이트 등록기 (Windows·macOS 자동 업로더)
+# Stargayte Uploader — 스타게이트 등록기 (Windows·macOS 자동 업로더)
 
 스타크래프트 리마스터가 게임이 끝날 때마다 AutoSave 폴더(윈도우 `문서\StarCraft\Maps\Replays\AutoSave`,
 맥 `~/Library/Application Support/Blizzard/StarCraft/Maps/Replays/AutoSave`)에 남기는 리플레이를 감지해, 홈페이지와 **같은 절차로** 경기결과에 자동 등록하는 트레이 앱이다.
@@ -37,11 +37,10 @@
 | 팀을 두 편으로 못 나눔 · 관전자 추정 · 2분 미만 | 건너뜀 |
 | 서버 오류·네트워크 끊김·사이트 창 안 뜸 | 5분마다 12번까지 다시 시도(`src/config.ts`) |
 
-건너뛴 것·실패한 것은 트레이 메뉴 "최근"과 로그(윈도우 `%APPDATA%\스타게이트 등록기\uploader.log`,
-맥 `~/Library/Application Support/스타게이트 등록기/uploader.log`)에 남는다. 처리 장부 `processed.json`도 같은 폴더다
-(Electron이 productName으로 데이터 폴더를 잡는다). 윈도우 설치 폴더는 `%LOCALAPPDATA%\Programs\stargayte-uploader`
-(원클릭 설치는 package.json의 name을 쓴다).
-처리 장부는 같은 폴더의 `processed.json`.
+건너뛴 것·실패한 것은 트레이 메뉴 "최근"과 로그(윈도우 `%APPDATA%\Stargayte Uploader\uploader.log`,
+맥 `~/Library/Application Support/Stargayte Uploader/uploader.log`)에 남는다. 처리 장부 `processed.json`도 같은 폴더다
+(Electron이 productName으로 데이터 폴더를 잡는다).
+윈도우 설치 폴더는 `%LOCALAPPDATA%\Programs\stargayte-uploader`(원클릭 설치는 package.json의 name을 쓴다).
 
 ## 개발
 ```

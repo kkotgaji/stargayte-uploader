@@ -56,7 +56,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          name: 스타게이트 등록기 ${{ steps.ver.outputs.tag }}
+          name: Stargayte Uploader ${{ steps.ver.outputs.tag }}
           files: installers/*
           generate_release_notes: true
           body: |

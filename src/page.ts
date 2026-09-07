@@ -56,7 +56,7 @@ export class SitePage {
     if (this.win && !this.win.isDestroyed()) { void this.load(); return; }
     this.win = new BrowserWindow({
       width: 440, height: 380, show: false, resizable: false, minimizable: false, maximizable: false,
-      title: "스타게이트 등록기", autoHideMenuBar: true, icon: this.icon,
+      title: "Stargayte Uploader", autoHideMenuBar: true, icon: this.icon,
       webPreferences: {
         preload: this.preload, contextIsolation: true, nodeIntegration: false, sandbox: true,
         // 세션이 앱을 껐다 켜도 남게 — 기본 세션도 남지만 이름을 박아 두면 뜻이 분명하다.
