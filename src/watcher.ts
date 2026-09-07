@@ -14,7 +14,7 @@ export interface WatcherOptions {
   seen: (path: string) => boolean;
   /** 다 써진 새 파일 하나 — 순서대로 한 번에 하나씩 불린다. */
   onFile: (path: string) => Promise<void>;
-  /** 재훑기에서 새로 잡힌 파일 수(0이면 안 부른다) — 첫 훑기 안내용. */
+  /** 재훑기 한 번이 끝날 때마다 새로 잡힌 파일 수(0 포함) — 첫 훑기 안내용. */
   onBatch?: (count: number) => void;
 }
 
@@ -116,6 +116,6 @@ export class ReplayWatcher {
     found.sort((a, b) => a.mtime - b.mtime);
     let n = 0;
     for (const f of found) if (await this.consider(f.path)) n++;
-    if (n > 0) this.opt.onBatch?.(n);
+    this.opt.onBatch?.(n);
   }
 }

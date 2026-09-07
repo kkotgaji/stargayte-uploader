@@ -158,6 +158,7 @@ function startWatching(): void {
       // 처음 설치한 뒤의 첫 훑기 — 옛 리플레이를 한 번에 올리니 무엇을 하는지 알린다.
       if (!store.ledger.firstRun) return;
       store.ledger.firstRun = false;
+      if (n === 0) return;
       const from = INITIAL_SCAN_FROM.slice(0, 10);
       log(`첫 훑기: ${from} 이후 리플레이 ${n}건`);
       showToast(`${from} 이후 리플레이 ${n}건을 스타게이트에 올립니다.`);
